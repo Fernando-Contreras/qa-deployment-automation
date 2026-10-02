@@ -1,0 +1,32 @@
+Hi team, could you please check?
+
+The same failure is happening on 2 environments: nttcw06_qa, nttcw27_qa.
+
+*Release:* T2.3.49
+*Job:* Deploy-Parallel
+*Failed patch:* nrm_custom_2.3.49.zip
+*Failed step:* 3
+
+||Environment||Build||Failed stage||Installer log||Console||
+|nttcw06_qa|#163|Check & Clean Up SHARED|/u02/app/NTTEAST/autoinstaller/logs/2026.09.22_14-02-15|[console|https://sdci.example.com/job/SD.PROJECT/job/nttcw06_qa/job/Deploy-Parallel/163/console]|
+|nttcw27_qa|#88|Custom NRM WEST|/u02/app/NTTWEST/autoinstaller/logs/2026.09.22_14-02-15|[console|https://sdci.example.com/job/SD.PROJECT/job/nttcw27_qa/job/Deploy-Parallel/88/console]|
+
+*Error message:*
+{quote}
+Exception in SQL process: ORA-00942: table or view does not exist at line 12 of 042_alter_billing_tables.sql INSTALLATION FAILED
+{quote}
+
+*Console output* (nttcw06_qa):
+{code:java}
+14:01:55  step3 (3/7) Installing patch nrm_custom_2.3.49.zip on EAST
+14:01:56  [INFO] Unpacking /u02/app/NTTEAST/patches/nrm_custom_2.3.49.zip
+14:02:10  [INFO] Applying RB.CST custom scripts
+14:02:11  [INFO] oracle_execute_sql: running 042_alter_billing_tables.sql
+14:02:14  Error location: patch nrm_custom_2.3.49.zip, step 3
+14:02:14  Error message:
+14:02:14  Exception in SQL process: ORA-00942: table or view does not exist
+14:02:14      at line 12 of 042_alter_billing_tables.sql
+14:02:14  INSTALLATION FAILED
+14:02:15  Total time: 00:12:31
+14:02:15  Log directory: /u02/app/NTTEAST/autoinstaller/logs/2026.09.22_14-02-15
+{code}

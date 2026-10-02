@@ -1,0 +1,243 @@
+{
+  "calls": [
+    [
+      "div.jenkins-form-item:has-text(\"SD_FILE\").first",
+      "count",
+      [],
+      {}
+    ],
+    [
+      "div.jenkins-form-item:has-text(\"SD_FILE\").first",
+      "scroll_into_view_if_needed",
+      [],
+      {
+        "timeout": 10000
+      }
+    ],
+    [
+      "div.jenkins-form-item:has-text(\"SD_FILE\").first >> input[type=\"checkbox\"].first",
+      "count",
+      [],
+      {}
+    ],
+    [
+      "div.jenkins-form-item:has-text(\"SD_FILE\").first >> input[type=\"checkbox\"].first",
+      "is_checked",
+      [],
+      {}
+    ],
+    [
+      "div.jenkins-form-item:has-text(\"SD_FILE\").first >> input[type=\"checkbox\"].first",
+      "check",
+      [],
+      {
+        "force": true,
+        "timeout": 10000
+      }
+    ],
+    [
+      "div.jenkins-form-item:has-text(\"SD_FILE\").first >> input[type=\"checkbox\"].first",
+      "is_checked",
+      [],
+      {}
+    ],
+    [
+      "div.jenkins-form-item:has-text(\"SD_FILE\").first",
+      "wait_for",
+      [],
+      {
+        "state": "visible",
+        "timeout": 180000
+      }
+    ],
+    [
+      "page",
+      "wait_for_timeout",
+      [
+        3000
+      ],
+      {}
+    ],
+    [
+      "input[name=\"value\"][type=\"text\"]:not([disabled])",
+      "count",
+      [],
+      {}
+    ],
+    [
+      "input[name=\"value\"][type=\"text\"]:not([disabled]).nth(0)",
+      "is_visible",
+      [],
+      {}
+    ],
+    [
+      "input[name=\"value\"][type=\"text\"]:not([disabled]).nth(0)",
+      "is_enabled",
+      [],
+      {}
+    ],
+    [
+      "input[name=\"value\"][type=\"text\"]:not([disabled]).nth(0)",
+      "fill",
+      [
+        "file://storage/sd.yaml"
+      ],
+      {}
+    ],
+    [
+      "input[name=\"value\"][type=\"text\"]:not([disabled]).nth(0)",
+      "input_value",
+      [],
+      {}
+    ],
+    [
+      "div.jenkins-form-item:has-text(\"CLEANUP_FS\").first",
+      "count",
+      [],
+      {}
+    ],
+    [
+      "div.jenkins-form-item:has-text(\"CLEANUP_FS\").first",
+      "scroll_into_view_if_needed",
+      [],
+      {
+        "timeout": 10000
+      }
+    ],
+    [
+      "div.jenkins-form-item:has-text(\"CLEANUP_FS\").first >> input[type=\"checkbox\"].first",
+      "count",
+      [],
+      {}
+    ],
+    [
+      "div.jenkins-form-item:has-text(\"CLEANUP_FS\").first >> input[type=\"checkbox\"].first",
+      "is_checked",
+      [],
+      {}
+    ],
+    [
+      "div.jenkins-form-item:has-text(\"CLEANUP_FS\").first >> input[type=\"checkbox\"].first",
+      "check",
+      [],
+      {
+        "force": true,
+        "timeout": 10000
+      }
+    ],
+    [
+      "div.jenkins-form-item:has-text(\"CLEANUP_FS\").first >> input[type=\"checkbox\"].first",
+      "is_checked",
+      [],
+      {}
+    ],
+    [
+      "div.jenkins-form-item:has-text(\"STOP_APPS_BEFORE\").first",
+      "count",
+      [],
+      {}
+    ],
+    [
+      "div.jenkins-form-item:has-text(\"STOP_APPS_BEFORE\").first",
+      "scroll_into_view_if_needed",
+      [],
+      {
+        "timeout": 10000
+      }
+    ],
+    [
+      "div.jenkins-form-item:has-text(\"STOP_APPS_BEFORE\").first >> input[type=\"checkbox\"].first",
+      "count",
+      [],
+      {}
+    ],
+    [
+      "div.jenkins-form-item:has-text(\"STOP_APPS_BEFORE\").first >> input[type=\"checkbox\"].first",
+      "is_checked",
+      [],
+      {}
+    ],
+    [
+      "div.jenkins-form-item:has-text(\"STOP_APPS_BEFORE\").first >> input[type=\"checkbox\"].first",
+      "check",
+      [],
+      {
+        "force": true,
+        "timeout": 10000
+      }
+    ],
+    [
+      "div.jenkins-form-item:has-text(\"STOP_APPS_BEFORE\").first >> input[type=\"checkbox\"].first",
+      "is_checked",
+      [],
+      {}
+    ],
+    [
+      "div.jenkins-form-item:has-text(\"START_APPS\").first",
+      "count",
+      [],
+      {}
+    ],
+    [
+      "div.jenkins-form-item:has-text(\"START_APPS\").first",
+      "scroll_into_view_if_needed",
+      [],
+      {
+        "timeout": 10000
+      }
+    ],
+    [
+      "div.jenkins-form-item:has-text(\"START_APPS\").first >> input[type=\"checkbox\"].first",
+      "count",
+      [],
+      {}
+    ],
+    [
+      "div.jenkins-form-item:has-text(\"START_APPS\").first >> input[type=\"checkbox\"].first",
+      "is_checked",
+      [],
+      {}
+    ],
+    [
+      "div.jenkins-form-item:has-text(\"START_APPS\").first >> input[type=\"checkbox\"].first",
+      "check",
+      [],
+      {
+        "force": true,
+        "timeout": 10000
+      }
+    ],
+    [
+      "div.jenkins-form-item:has-text(\"START_APPS\").first >> input[type=\"checkbox\"].first",
+      "is_checked",
+      [],
+      {}
+    ],
+    [
+      "role=button[Build].first",
+      "count",
+      [],
+      {}
+    ],
+    [
+      "role=button[Build].first",
+      "click",
+      [],
+      {
+        "no_wait_after": true,
+        "timeout": 10000
+      }
+    ],
+    [
+      "page",
+      "wait_for_url",
+      [
+        "<callable>"
+      ],
+      {
+        "timeout": 60000
+      }
+    ]
+  ],
+  "output": "[nttcw06] 🔎 Looking for: SD_FILE\n[nttcw06] ✅ SD_FILE clicked.\n[nttcw06] Finding SD_FILE input...\n[nttcw06] 🔎 Waiting for editable field: SD_FILE\n[nttcw06] ✅ Found editable field for SD_FILE\n[nttcw06] ✅ SD_FILE filled.\n[nttcw06] Enabling CLEANUP_FS...\n[nttcw06] 🔎 Looking for: CLEANUP_FS\n[nttcw06] ✅ CLEANUP_FS clicked.\n[nttcw06] Enabling STOP_APPS_BEFORE...\n[nttcw06] 🔎 Looking for: STOP_APPS_BEFORE\n[nttcw06] ✅ STOP_APPS_BEFORE clicked.\n[nttcw06] Enabling START_APPS...\n[nttcw06] 🔎 Looking for: START_APPS\n[nttcw06] ✅ START_APPS clicked.\n[nttcw06] 🚀 Build (2/5) clicked.\n[nttcw06] ✅ Build submitted (Jenkins respondio).\n"
+}

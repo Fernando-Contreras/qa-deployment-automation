@@ -1,0 +1,58 @@
+[
+  {
+    "header": "T2.3.49 — 99CI",
+    "envs": [
+      42,
+      44,
+      101
+    ],
+    "webex_md": "## **T2.3.49 — 99CI**\n---\n✅ **PASSED**:\n[**42QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw42_qa/job/Deploy-Parallel/) (T2.3.49) EAST: 101869073534 WEST: 201634941596\n\n🔄 **IN PROGRESS**:\n[**44QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw44_qa/job/Deploy-Parallel/) (T2.3.49)\n[**101QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw101_qa/job/Deploy-Parallel/) (T2.3.49)"
+  },
+  {
+    "header": "46CI — Build A",
+    "envs": [
+      32,
+      43,
+      67,
+      94,
+      115,
+      120
+    ],
+    "webex_md": "## **46CI — Build A**\n---\n🔄 **IN PROGRESS**:\n[**32QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw32_qa/job/Deploy-Parallel/) (46CI)\n[**43QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw43_qa/job/Deploy-Parallel/) (46CI)\n[**67QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw67_qa/job/Deploy-Parallel/) (46CI)\n[**94QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw94_qa/job/Deploy-Parallel/) (46CI)\n[**115QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw115_qa/job/Deploy-Parallel/) (46CI)\n[**120QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw120_qa/job/Deploy-Parallel/) (46CI)"
+  },
+  {
+    "header": "46CI — Build B",
+    "envs": [
+      26,
+      74,
+      81
+    ],
+    "webex_md": "## **46CI — Build B**\n---\n✅ **PASSED**:\n[**26QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw26_qa/job/Deploy-Parallel/) (46CI) EAST: 101759701148 WEST: 201564435941\n\n❌ **FAILED**:\n[**74QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw74_qa/job/Deploy-Parallel/) (46CI) - Check & Clean Up SHARED\n[**81QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw81_qa/job/Deploy-Parallel/) (46CI) - Check & Clean Up SHARED"
+  },
+  {
+    "header": "T2.3.49 — 99CI",
+    "envs": [
+      2,
+      6,
+      11,
+      80
+    ],
+    "webex_md": "## **T2.3.49 — 99CI**\n---\n✅ **PASSED**:\n[**02QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw02_qa/job/Deploy-Parallel/) (T2.3.49) EAST: 101516716290 WEST: 201216622418\n[**06QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw06_qa/job/Deploy-Parallel/) (T2.3.49) EAST: 101142587690 WEST: 201206358994\n[**11QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw11_qa/job/Deploy-Parallel/) (T2.3.49) EAST: 101484632197 WEST: 201320818440\n[**80QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw80_qa/job/Deploy-Parallel/) (T2.3.49) EAST: 101115316862 WEST: 201216622418"
+  },
+  {
+    "header": "CI_23 — Build & CI_07 — Build",
+    "envs": [
+      12,
+      26,
+      27,
+      35,
+      36,
+      37,
+      38,
+      39,
+      40,
+      42
+    ],
+    "webex_md": "## **CI_23 — Build & CI_07 — Build**\n---\n✅ **PASSED**:\n[**COM12QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcom12_qa/job/Deploy-Parallel/) (CI_07)\n[**COM26QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcom26_qa/job/Deploy-Parallel/) (CI_07)\n[**COM27QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcom27_qa/job/Deploy-Parallel/) (CI_07)\n\n🔄 **IN PROGRESS**:\n[**COM35QA**](https://snapci.example.com/job/SD.PROJECT/job/nttcom35_qa/job/NTT-Create-Eatlon-Snapshot/) (CI_23 SS)\n[**COM36QA**](https://snapci.example.com/job/SD.PROJECT/job/nttcom36_qa/job/NTT-Create-Eatlon-Snapshot/) (CI_23 SS)\n[**COM37QA**](https://snapci.example.com/job/SD.PROJECT/job/nttcom37_qa/job/NTT-Create-Eatlon-Snapshot/) (CI_23 SS)\n[**COM38QA**](https://snapci.example.com/job/SD.PROJECT/job/nttcom38_qa/job/NTT-Create-Eatlon-Snapshot/) (CI_23 SS)\n[**COM39QA**](https://snapci.example.com/job/SD.PROJECT/job/nttcom39_qa/job/NTT-Create-Eatlon-Snapshot/) (CI_23 SS)\n[**COM40QA**](https://snapci.example.com/job/SD.PROJECT/job/nttcom40_qa/job/NTT-Create-Eatlon-Snapshot/) (CI_23 SS)\n[**COM42QA**](https://snapci.example.com/job/SD.PROJECT/job/nttcom42_qa/job/NTT-Create-Eatlon-Snapshot/) (CI_23 SS)"
+  }
+]

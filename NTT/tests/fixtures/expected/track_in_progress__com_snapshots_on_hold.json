@@ -1,0 +1,29 @@
+[
+  {
+    "url": "https://sdci.example.com/job/SD.PROJECT/job/nttcw11_qa/job/Deploy-Parallel/",
+    "patch": "file://fileserver/releases/T2.3.49/SD/sd-release-p2-2024.2-crt2r3-r20260909140350-T2.3.49.yaml",
+    "patch_source": "env_list",
+    "patch_candidates": [
+      "file://fileserver/releases/T2.3.49/SD/sd-release-p2-2024.2-crt2r3-r20260909140350-T2.3.49.yaml"
+    ],
+    "version": "T2.3.49"
+  },
+  {
+    "url": "https://sdci.example.com/job/SD.PROJECT/job/nttcw80_qa/job/Deploy-Parallel/",
+    "patch": "file://fileserver/releases/T2.3.49/SD/sd-release-p2-2024.2-crt2r3-r20260909140350-T2.3.49.yaml",
+    "patch_source": "env_list",
+    "patch_candidates": [
+      "file://fileserver/releases/T2.3.49/SD/sd-release-p2-2024.2-crt2r3-r20260909140350-T2.3.49.yaml"
+    ],
+    "version": "T2.3.49"
+  },
+  {
+    "url": "https://sdci.example.com/job/SD.PROJECT/job/nttcw32_qa/job/Deploy-Parallel/",
+    "patch": "file://fileserver/releases/T2.3.50/SD/sd-release-p2-2024.2-adm_r1.5-r20260909144230-T2.3.50.yaml",
+    "patch_source": "env_list",
+    "patch_candidates": [
+      "file://fileserver/releases/T2.3.50/SD/sd-release-p2-2024.2-adm_r1.5-r20260909144230-T2.3.50.yaml"
+    ],
+    "version": null
+  }
+]

@@ -1,0 +1,4 @@
+[tool.pytest.ini_options]
+testpaths = ["NTT/tests"]
+pythonpath = ["NTT", "NTT/tests"]
+addopts = "-ra -p no:cacheprovider"

@@ -1,0 +1,144 @@
+[
+  {
+    "url": "https://sdci.example.com/job/SD.PROJECT/job/nttcw44_qa/job/Deploy-Parallel/",
+    "patch": "file://fileserver/releases/T2.3.49/SD/sd-release-p2-2024.2-crt2r3-r20260831140210-T2.3.49.yaml",
+    "patch_source": "env_list",
+    "patch_candidates": [
+      "file://fileserver/releases/T2.3.49/SD/sd-release-p2-2024.2-crt2r3-r20260831140210-T2.3.49.yaml"
+    ],
+    "version": "T2.3.49"
+  },
+  {
+    "url": "https://sdci.example.com/job/SD.PROJECT/job/nttcw101_qa/job/Deploy-Parallel/",
+    "patch": "file://fileserver/releases/T2.3.49/SD/sd-release-p2-2024.2-crt2r3-r20260831140210-T2.3.49.yaml",
+    "patch_source": "env_list",
+    "patch_candidates": [
+      "file://fileserver/releases/T2.3.49/SD/sd-release-p2-2024.2-crt2r3-r20260831140210-T2.3.49.yaml"
+    ],
+    "version": "T2.3.49"
+  },
+  {
+    "url": "https://sdci.example.com/job/SD.PROJECT/job/nttcw32_qa/job/Deploy-Parallel/",
+    "patch": "file://fileserver/releases/ADM.R0/SD/sd-release-p2-2024.2-adm-r20260831130934-ADM.R0.yaml",
+    "patch_source": "env_list",
+    "patch_candidates": [
+      "file://fileserver/releases/ADM.R0/SD/sd-release-p2-2024.2-adm-r20260831130934-ADM.R0.yaml"
+    ],
+    "version": null
+  },
+  {
+    "url": "https://sdci.example.com/job/SD.PROJECT/job/nttcw43_qa/job/Deploy-Parallel/",
+    "patch": "file://fileserver/releases/ADM.R0/SD/sd-release-p2-2024.2-adm-r20260831130934-ADM.R0.yaml",
+    "patch_source": "env_list",
+    "patch_candidates": [
+      "file://fileserver/releases/ADM.R0/SD/sd-release-p2-2024.2-adm-r20260831130934-ADM.R0.yaml"
+    ],
+    "version": null
+  },
+  {
+    "url": "https://sdci.example.com/job/SD.PROJECT/job/nttcw67_qa/job/Deploy-Parallel/",
+    "patch": "file://fileserver/releases/ADM.R0/SD/sd-release-p2-2024.2-adm-r20260831130934-ADM.R0.yaml",
+    "patch_source": "env_list",
+    "patch_candidates": [
+      "file://fileserver/releases/ADM.R0/SD/sd-release-p2-2024.2-adm-r20260831130934-ADM.R0.yaml"
+    ],
+    "version": null
+  },
+  {
+    "url": "https://sdci.example.com/job/SD.PROJECT/job/nttcw94_qa/job/Deploy-Parallel/",
+    "patch": "file://fileserver/releases/ADM.R0/SD/sd-release-p2-2024.2-adm-r20260831130934-ADM.R0.yaml",
+    "patch_source": "env_list",
+    "patch_candidates": [
+      "file://fileserver/releases/ADM.R0/SD/sd-release-p2-2024.2-adm-r20260831130934-ADM.R0.yaml"
+    ],
+    "version": null
+  },
+  {
+    "url": "https://sdci.example.com/job/SD.PROJECT/job/nttcw115_qa/job/Deploy-Parallel/",
+    "patch": "file://fileserver/releases/ADM.R0/SD/sd-release-p2-2024.2-adm-r20260831130934-ADM.R0.yaml",
+    "patch_source": "env_list",
+    "patch_candidates": [
+      "file://fileserver/releases/ADM.R0/SD/sd-release-p2-2024.2-adm-r20260831130934-ADM.R0.yaml"
+    ],
+    "version": null
+  },
+  {
+    "url": "https://sdci.example.com/job/SD.PROJECT/job/nttcw120_qa/job/Deploy-Parallel/",
+    "patch": "file://fileserver/releases/ADM.R0/SD/sd-release-p2-2024.2-adm-r20260831130934-ADM.R0.yaml",
+    "patch_source": "env_list",
+    "patch_candidates": [
+      "file://fileserver/releases/ADM.R0/SD/sd-release-p2-2024.2-adm-r20260831130934-ADM.R0.yaml"
+    ],
+    "version": null
+  },
+  {
+    "url": "https://snapci.example.com/job/SD.PROJECT/job/nttcom35_qa/job/NTT-Create-Eatlon-Snapshot/",
+    "patch": "nttcom23_ci_48590/nttcom23_ci_nitro_snapshot_ci_20260831_T5",
+    "patch_source": "env_list",
+    "patch_candidates": [
+      "nttcom23_ci_48590/nttcom23_ci_nitro_snapshot_ci_20260831_T5",
+      "file://fileserver/releases/G2.1.1/SD/sd-release-p4-2024.2-ph4gr2-r20260831180549-G2.1.1.yaml"
+    ],
+    "version": null
+  },
+  {
+    "url": "https://snapci.example.com/job/SD.PROJECT/job/nttcom36_qa/job/NTT-Create-Eatlon-Snapshot/",
+    "patch": "nttcom23_ci_48590/nttcom23_ci_nitro_snapshot_ci_20260831_T5",
+    "patch_source": "env_list",
+    "patch_candidates": [
+      "nttcom23_ci_48590/nttcom23_ci_nitro_snapshot_ci_20260831_T5",
+      "file://fileserver/releases/G2.1.1/SD/sd-release-p4-2024.2-ph4gr2-r20260831180549-G2.1.1.yaml"
+    ],
+    "version": null
+  },
+  {
+    "url": "https://snapci.example.com/job/SD.PROJECT/job/nttcom37_qa/job/NTT-Create-Eatlon-Snapshot/",
+    "patch": "nttcom23_ci_48590/nttcom23_ci_nitro_snapshot_ci_20260831_T5",
+    "patch_source": "env_list",
+    "patch_candidates": [
+      "nttcom23_ci_48590/nttcom23_ci_nitro_snapshot_ci_20260831_T5",
+      "file://fileserver/releases/G2.1.1/SD/sd-release-p4-2024.2-ph4gr2-r20260831180549-G2.1.1.yaml"
+    ],
+    "version": null
+  },
+  {
+    "url": "https://snapci.example.com/job/SD.PROJECT/job/nttcom38_qa/job/NTT-Create-Eatlon-Snapshot/",
+    "patch": "nttcom23_ci_48590/nttcom23_ci_nitro_snapshot_ci_20260831_T5",
+    "patch_source": "env_list",
+    "patch_candidates": [
+      "nttcom23_ci_48590/nttcom23_ci_nitro_snapshot_ci_20260831_T5",
+      "file://fileserver/releases/G2.1.1/SD/sd-release-p4-2024.2-ph4gr2-r20260831180549-G2.1.1.yaml"
+    ],
+    "version": null
+  },
+  {
+    "url": "https://snapci.example.com/job/SD.PROJECT/job/nttcom39_qa/job/NTT-Create-Eatlon-Snapshot/",
+    "patch": "nttcom23_ci_48590/nttcom23_ci_nitro_snapshot_ci_20260831_T5",
+    "patch_source": "env_list",
+    "patch_candidates": [
+      "nttcom23_ci_48590/nttcom23_ci_nitro_snapshot_ci_20260831_T5",
+      "file://fileserver/releases/G2.1.1/SD/sd-release-p4-2024.2-ph4gr2-r20260831180549-G2.1.1.yaml"
+    ],
+    "version": null
+  },
+  {
+    "url": "https://snapci.example.com/job/SD.PROJECT/job/nttcom40_qa/job/NTT-Create-Eatlon-Snapshot/",
+    "patch": "nttcom23_ci_48590/nttcom23_ci_nitro_snapshot_ci_20260831_T5",
+    "patch_source": "env_list",
+    "patch_candidates": [
+      "nttcom23_ci_48590/nttcom23_ci_nitro_snapshot_ci_20260831_T5",
+      "file://fileserver/releases/G2.1.1/SD/sd-release-p4-2024.2-ph4gr2-r20260831180549-G2.1.1.yaml"
+    ],
+    "version": null
+  },
+  {
+    "url": "https://snapci.example.com/job/SD.PROJECT/job/nttcom42_qa/job/NTT-Create-Eatlon-Snapshot/",
+    "patch": "nttcom23_ci_48590/nttcom23_ci_nitro_snapshot_ci_20260831_T5",
+    "patch_source": "env_list",
+    "patch_candidates": [
+      "nttcom23_ci_48590/nttcom23_ci_nitro_snapshot_ci_20260831_T5",
+      "file://fileserver/releases/G2.1.1/SD/sd-release-p4-2024.2-ph4gr2-r20260831180549-G2.1.1.yaml"
+    ],
+    "version": null
+  }
+]

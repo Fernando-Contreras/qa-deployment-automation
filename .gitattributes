@@ -1,0 +1,6 @@
+# En el repo todo va con LF; en Windows git lo saca con CRLF. Python lee los dos igual.
+* text=auto
+
+*.png binary
+*.xlsx binary
+*.docx binary

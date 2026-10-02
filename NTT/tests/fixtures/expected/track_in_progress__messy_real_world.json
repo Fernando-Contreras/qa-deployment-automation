@@ -1,0 +1,65 @@
+[
+  {
+    "url": "https://snapci.example.com/job/SD.PROJECT/job/nttcw42_qa/job/Restore-Eatlon-SnapShot/",
+    "patch": "nttcw46_qa_47982/nttcw46_qa_nitro_snapshot_ci_20260825_T4",
+    "patch_source": "env_list",
+    "patch_candidates": [
+      "nttcw46_qa_47982/nttcw46_qa_nitro_snapshot_ci_20260825_T4"
+    ],
+    "version": null
+  },
+  {
+    "url": "https://snapci.example.com/job/SD.PROJECT/job/nttcw43_qa/job/Restore-Eatlon-SnapShot/",
+    "patch": "nttcw46_qa_47982/nttcw46_qa_nitro_snapshot_ci_20260825_T4",
+    "patch_source": "env_list",
+    "patch_candidates": [
+      "nttcw46_qa_47982/nttcw46_qa_nitro_snapshot_ci_20260825_T4"
+    ],
+    "version": null
+  },
+  {
+    "url": "https://snapci.example.com/job/SD.PROJECT/job/nttcw94_qa/job/Restore-Eatlon-SnapShot/",
+    "patch": "nttcw46_qa_47982/nttcw46_qa_nitro_snapshot_ci_20260825_T4",
+    "patch_source": "env_list",
+    "patch_candidates": [
+      "nttcw46_qa_47982/nttcw46_qa_nitro_snapshot_ci_20260825_T4"
+    ],
+    "version": null
+  },
+  {
+    "url": "https://snapci.example.com/job/SD.PROJECT/job/nttcw101_qa/job/Restore-Eatlon-SnapShot/",
+    "patch": "nttcw46_qa_47982/nttcw46_qa_nitro_snapshot_ci_20260825_T4",
+    "patch_source": "env_list",
+    "patch_candidates": [
+      "nttcw46_qa_47982/nttcw46_qa_nitro_snapshot_ci_20260825_T4"
+    ],
+    "version": null
+  },
+  {
+    "url": "https://snapci.example.com/job/SD.PROJECT/job/nttcw115_qa/job/Restore-Eatlon-SnapShot/",
+    "patch": "nttcw46_qa_47982/nttcw46_qa_nitro_snapshot_ci_20260825_T4",
+    "patch_source": "env_list",
+    "patch_candidates": [
+      "nttcw46_qa_47982/nttcw46_qa_nitro_snapshot_ci_20260825_T4"
+    ],
+    "version": null
+  },
+  {
+    "url": "https://snapci.example.com/job/SD.PROJECT/job/nttcw120_qa/job/Restore-Eatlon-SnapShot/",
+    "patch": "nttcw46_qa_47982/nttcw46_qa_nitro_snapshot_ci_20260825_T4",
+    "patch_source": "env_list",
+    "patch_candidates": [
+      "nttcw46_qa_47982/nttcw46_qa_nitro_snapshot_ci_20260825_T4"
+    ],
+    "version": null
+  },
+  {
+    "url": "https://sdci.example.com/job/SD.PROJECT/job/nttcw11_qa/job/Deploy-Parallel/",
+    "patch": "file://fileserver/releases/T2.3.49/SD/sd-release-p2-2024.2-crt2r3-r20260825161615-T2.3.49.yaml",
+    "patch_source": "env_list",
+    "patch_candidates": [
+      "file://fileserver/releases/T2.3.49/SD/sd-release-p2-2024.2-crt2r3-r20260825161615-T2.3.49.yaml"
+    ],
+    "version": "T2.3.49"
+  }
+]

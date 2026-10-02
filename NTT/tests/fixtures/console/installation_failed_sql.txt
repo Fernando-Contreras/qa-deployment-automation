@@ -1,0 +1,18 @@
+13:58:01  Started by user your_user
+13:58:02  Running on agent-07 in /var/lib/jenkins/workspace/nttcw06_qa/Deploy-Parallel
+13:58:40  TASK [autoinstaller : run installation] ****************************************
+14:01:55  step3 (3/7) Installing patch nrm_custom_2.3.49.zip on EAST
+14:01:56  [INFO] Unpacking /u02/app/NTTEAST/patches/nrm_custom_2.3.49.zip
+14:02:10  [INFO] Applying RB.CST custom scripts
+14:02:11  [INFO] oracle_execute_sql: running 042_alter_billing_tables.sql
+14:02:14  Error location: patch nrm_custom_2.3.49.zip, step 3
+14:02:14  Error message:
+14:02:14  Exception in SQL process: ORA-00942: table or view does not exist
+14:02:14      at line 12 of 042_alter_billing_tables.sql
+14:02:14  INSTALLATION FAILED
+14:02:15  Total time: 00:12:31
+14:02:15  Log directory: /u02/app/NTTEAST/autoinstaller/logs/2026.09.22_14-02-15
+14:02:16  fatal: [nttcw06app1]: FAILED! => {"changed": false, "msg": "autoinstaller exited with 1"}
+14:02:16  PLAY RECAP *********************************************************************
+14:02:16  nttcw06app1              : ok=14   changed=3    unreachable=0    failed=1    skipped=2
+14:02:17  Finished: FAILURE

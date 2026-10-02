@@ -1,0 +1,20 @@
+[
+  {
+    "line_no": 43,
+    "label": "74QA",
+    "job_url": "https://sdci.example.com/job/SD.PROJECT/job/nttcw74_qa/job/Deploy-Parallel/",
+    "version": "46CI",
+    "stage": "Check & Clean Up SHARED",
+    "jira_key": null,
+    "raw": "[**74QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw74_qa/job/Deploy-Parallel/) (46CI) - Check & Clean Up SHARED"
+  },
+  {
+    "line_no": 44,
+    "label": "81QA",
+    "job_url": "https://sdci.example.com/job/SD.PROJECT/job/nttcw81_qa/job/Deploy-Parallel/",
+    "version": "46CI",
+    "stage": "Check & Clean Up SHARED",
+    "jira_key": null,
+    "raw": "[**81QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw81_qa/job/Deploy-Parallel/) (46CI) - Check & Clean Up SHARED"
+  }
+]

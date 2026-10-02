@@ -1,0 +1,29 @@
+[
+  {
+    "line_no": 30,
+    "label": "COM27QA",
+    "job_url": "https://sdci.example.com/job/SD.PROJECT/job/nttcom27_qa/job/Deploy-Parallel/",
+    "version": "CI_07",
+    "stage": "Start APPs COM",
+    "jira_key": "QAPRJ-194714",
+    "raw": "[**COM27QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcom27_qa/job/Deploy-Parallel/) (CI_07) - Start APPs COM: https://jira.example.com/browse/QAPRJ-194714"
+  },
+  {
+    "line_no": 53,
+    "label": "06QA",
+    "job_url": "https://sdci.example.com/job/SD.PROJECT/job/nttcw06_qa/job/Deploy-Parallel/",
+    "version": "T2.3.49",
+    "stage": "Check & Clean Up SHARED",
+    "jira_key": "QAPRJ-189455",
+    "raw": "[**06QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw06_qa/job/Deploy-Parallel/) (T2.3.49) - Check & Clean Up SHARED: https://jira.example.com/browse/QAPRJ-189455"
+  },
+  {
+    "line_no": 66,
+    "label": "81QA",
+    "job_url": "https://sdci.example.com/job/SD.PROJECT/job/nttcw81_qa/job/Deploy-Parallel/",
+    "version": "46CI",
+    "stage": "Collections WEST, Collections EAST",
+    "jira_key": null,
+    "raw": "[**81QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw81_qa/job/Deploy-Parallel/) (46CI) - Collections WEST, Collections EAST"
+  }
+]

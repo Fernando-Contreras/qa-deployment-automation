@@ -1,0 +1,7 @@
+playwright>=1.56
+pywin32>=306
+PyAutoGUI>=0.9.54
+keyboard>=0.13.5
+pyperclip>=1.11
+Pillow>=10.0
+python-dateutil>=2.9

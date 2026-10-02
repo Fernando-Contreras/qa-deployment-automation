@@ -1,0 +1,31 @@
+# Secretos: nunca al repo (las credenciales viven cifradas fuera de aquí).
+token_webex.txt
+*.token
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+
+# Lo que generan los scripts al correr
+*.log
+*.bak
+com_sanity_shots/
+ts_sanity_shots/
+Divided_SBA_logs/
+temp.png
+pim_filter_*.txt
+pim_filter_*.png
+
+# Respaldos viejos y pruebas sueltas que ya no se usan (siguen en disco, fuera del repo)
+_archive/
+
+# Herramientas locales
+.claude/
+.vscode/
+.idea/
+
+# No son parte de la automatización
+Mouse_Giggler.py

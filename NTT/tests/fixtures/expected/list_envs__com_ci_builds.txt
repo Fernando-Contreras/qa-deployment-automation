@@ -1,0 +1,11 @@
+**CI_23 — Build**
+---
+[**COM26QA**](https://snapci.example.com/job/SD.PROJECT/job/nttcom26_qa/job/NTT-Create-Eatlon-Snapshot/) (CI_23 SS)
+[**COM28QA**](https://snapci.example.com/job/SD.PROJECT/job/nttcom28_qa/job/NTT-Create-Eatlon-Snapshot/) (CI_23 SS)
+[**COM2QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcom2_qa/job/Deploy-Parallel/) (CI_23)
+[**COM15QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcom15_qa/job/Deploy-Parallel/) (CI_23)
+
+---
+Environment lists:
+- CI_23 SS → COM26, COM28
+- CI_23 → COM2, COM15

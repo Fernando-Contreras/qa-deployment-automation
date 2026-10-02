@@ -1,0 +1,10 @@
+**T2.3.49 — Build**
+---
+[**101QA**](https://snapci.example.com/job/SD.PROJECT/job/nttcw101_qa/job/Restore-Eatlon-SnapShot/) (T2.3.49 SS)
+[**06QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw06_qa/job/Deploy-Parallel/) (T2.3.49)
+[**42QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw42_qa/job/Deploy-Parallel/) (T2.3.49)
+
+---
+Environment lists:
+- T2.3.49 SS → 101
+- T2.3.49 → 06, 42

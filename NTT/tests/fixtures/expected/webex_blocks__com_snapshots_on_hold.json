@@ -1,0 +1,52 @@
+[
+  {
+    "header": "88CI — 8SepBuild",
+    "envs": [
+      74,
+      81
+    ],
+    "webex_md": "## **88CI — 8SepBuild**\n---\n🔒 **ON HOLD** till the T3 copy finishes:\n[**74QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw74_qa/job/Deploy-Parallel/) (88CI)\n[**81QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw81_qa/job/Deploy-Parallel/) (88CI)"
+  },
+  {
+    "header": "T2.3.49 — 46CI",
+    "envs": [
+      2,
+      11,
+      80
+    ],
+    "webex_md": "## **T2.3.49 — 46CI**\n---\n✅ **PASSED**:\n[**02QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw02_qa/job/Deploy-Parallel/) (T2.3.49) EAST: 101896301785 WEST: 201281536914\n\n🔄 **IN PROGRESS**:\n[**11QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw11_qa/job/Deploy-Parallel/) (T2.3.49)\n[**80QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw80_qa/job/Deploy-Parallel/) (T2.3.49)"
+  },
+  {
+    "header": "CI_23 — Build & CI_07 — Build",
+    "envs": [
+      2,
+      12,
+      15,
+      25,
+      26,
+      28,
+      30,
+      37
+    ],
+    "webex_md": "## **CI_23 — Build & CI_07 — Build**\n---\n✅ **PASSED**:\n[**COM12QA**](https://snapci.example.com/job/SD.PROJECT/job/nttcom12_qa/job/NTT-Create-Eatlon-Snapshot/) (CI_07 SS)\n[**COM25QA**](https://snapci.example.com/job/SD.PROJECT/job/nttcom25_qa/job/Restore-Eatlon-SnapShot/) (CI_07 SS)\n[**COM30QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcom30_qa/job/Deploy-Parallel/) (CI_07)\n[**COM2QA**](https://snapci.example.com/job/SD.PROJECT/job/nttcom2_qa/job/NTT-Create-Eatlon-Snapshot/) (CI_23 SS)\n[**COM15QA**](https://snapci.example.com/job/SD.PROJECT/job/nttcom15_qa/job/NTT-Create-Eatlon-Snapshot/) (CI_23 SS)\n[**COM26QA**](https://snapci.example.com/job/SD.PROJECT/job/nttcom26_qa/job/Restore-Eatlon-SnapShot/) (CI_23 SS)\n[**COM28QA**](https://snapci.example.com/job/SD.PROJECT/job/nttcom28_qa/job/Restore-Eatlon-SnapShot/) (CI_23 SS)\n[**COM37QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcom37_qa/job/Deploy-Parallel/) (CI_23)"
+  },
+  {
+    "header": "T2.3.49 — 46CI",
+    "envs": [
+      42,
+      43,
+      44
+    ],
+    "webex_md": "## **T2.3.49 — 46CI**\n---\n🔒 **ON HOLD**:\n[**43QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw43_qa/job/Deploy-Parallel/) (T2.3.49)\n[**44QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw44_qa/job/Deploy-Parallel/) (T2.3.49)\n\n❌ **FAILED**:\n[**42QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw42_qa/job/Deploy-Parallel/) (T2.3.49) - Custom NRM WEST"
+  },
+  {
+    "header": "99CI — Build",
+    "envs": [
+      32,
+      67,
+      101,
+      115
+    ],
+    "webex_md": "## **99CI — Build**\n---\n🔄 **IN PROGRESS**:\n[**32QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw32_qa/job/Deploy-Parallel/) (99CI)\n\n🔒 **ON HOLD**:\n[**67QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw67_qa/job/Deploy-Parallel/) (99CI)\n[**101QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw101_qa/job/Deploy-Parallel/) (99CI)\n[**115QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw115_qa/job/Deploy-Parallel/) (99CI)"
+  }
+]

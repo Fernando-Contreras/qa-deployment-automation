@@ -1,0 +1,9 @@
+**T2.3.50 — 09SepBuild**
+---
+[**32QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw32_qa/job/Deploy-Parallel/) (T2.3.50)
+[**67QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw67_qa/job/Deploy-Parallel/) (T2.3.50)
+[**115QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw115_qa/job/Deploy-Parallel/) (T2.3.50)
+
+---
+Environment lists:
+- T2.3.50 → 32, 67, 115

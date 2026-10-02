@@ -1,0 +1,98 @@
+## Today's deployments
+
+## **T2.3.49 — 99CI**
+---
+✅ **PASSED**:
+[**42QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw42_qa/job/Deploy-Parallel/) (T2.3.49) EAST: 101869073534 WEST: 201634941596
+[**44QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw44_qa/job/Deploy-Parallel/) (T2.3.49)
+[**101QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw101_qa/job/Deploy-Parallel/) (T2.3.49)
+
+
+---
+Environment lists:
+- T2.3.49 → 42, 44, 101
+file://fileserver/releases/T2.3.49/SD/sd-release-p2-2024.2-crt2r3-r20260831140210-T2.3.49.yaml
+
+
+---
+
+## **46CI — Build A**
+---
+🔄 **IN PROGRESS**:
+[**32QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw32_qa/job/Deploy-Parallel/) (46CI)
+[**43QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw43_qa/job/Deploy-Parallel/) (46CI)
+[**67QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw67_qa/job/Deploy-Parallel/) (46CI)
+[**94QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw94_qa/job/Deploy-Parallel/) (46CI)
+[**115QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw115_qa/job/Deploy-Parallel/) (46CI)
+[**120QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw120_qa/job/Deploy-Parallel/) (46CI)
+
+---
+Environment lists:
+- 46CI → 32, 115, 120, 43, 67, 94
+file://fileserver/releases/ADM.R0/SD/sd-release-p2-2024.2-adm-r20260831130934-ADM.R0.yaml
+
+
+---
+
+## **46CI — Build B**
+---
+✅ **PASSED**:
+[**26QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw26_qa/job/Deploy-Parallel/) (46CI) EAST: 101759701148 WEST: 201564435941
+
+❌ **FAILED**:
+[**74QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw74_qa/job/Deploy-Parallel/) (46CI) - Check & Clean Up SHARED
+[**81QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw81_qa/job/Deploy-Parallel/) (46CI) - Check & Clean Up SHARED
+
+---
+Environment lists:
+- 46CI → 26, 74, 81
+file://fileserver/releases/ADM.R0/SD/sd-release-p2-2024.2-adm-r20260831130934-ADM.R0.yaml
+
+
+---
+
+## **T2.3.49 — 99CI**
+---
+✅ **PASSED**:
+[**02QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw02_qa/job/Deploy-Parallel/) (T2.3.49) EAST: 101516716290 WEST: 201216622418
+[**06QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw06_qa/job/Deploy-Parallel/) (T2.3.49) EAST: 101142587690 WEST: 201206358994
+[**11QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw11_qa/job/Deploy-Parallel/) (T2.3.49) EAST: 101484632197 WEST: 201320818440
+[**80QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw80_qa/job/Deploy-Parallel/) (T2.3.49) EAST: 101115316862 WEST: 201216622418
+
+---
+Environment lists:
+- T2.3.49 → 02, 06, 11, 80
+file://fileserver/releases/T2.3.49/SD/sd-release-p2-2024.2-crt2r3-r20260831140210-T2.3.49.yaml
+
+
+---
+
+## **CI_23 — Build & CI_07 — Build**
+---
+✅ **PASSED**:
+[**COM12QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcom12_qa/job/Deploy-Parallel/) (CI_07)
+[**COM26QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcom26_qa/job/Deploy-Parallel/) (CI_07)
+[**COM27QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcom27_qa/job/Deploy-Parallel/) (CI_07)
+
+🔄 **IN PROGRESS**:
+[**COM35QA**](https://snapci.example.com/job/SD.PROJECT/job/nttcom35_qa/job/NTT-Create-Eatlon-Snapshot/) (CI_23 SS)
+[**COM36QA**](https://snapci.example.com/job/SD.PROJECT/job/nttcom36_qa/job/NTT-Create-Eatlon-Snapshot/) (CI_23 SS)
+[**COM37QA**](https://snapci.example.com/job/SD.PROJECT/job/nttcom37_qa/job/NTT-Create-Eatlon-Snapshot/) (CI_23 SS)
+[**COM38QA**](https://snapci.example.com/job/SD.PROJECT/job/nttcom38_qa/job/NTT-Create-Eatlon-Snapshot/) (CI_23 SS)
+[**COM39QA**](https://snapci.example.com/job/SD.PROJECT/job/nttcom39_qa/job/NTT-Create-Eatlon-Snapshot/) (CI_23 SS)
+[**COM40QA**](https://snapci.example.com/job/SD.PROJECT/job/nttcom40_qa/job/NTT-Create-Eatlon-Snapshot/) (CI_23 SS)
+[**COM42QA**](https://snapci.example.com/job/SD.PROJECT/job/nttcom42_qa/job/NTT-Create-Eatlon-Snapshot/) (CI_23 SS)
+
+---
+Environment lists:
+- CI_23 SS → COM35, COM36, COM37, COM38, COM39, COM40, COM42
+nttcom23_ci_48590/nttcom23_ci_nitro_snapshot_ci_20260831_T5
+- CI_07 → COM12, COM26, COM27
+
+file://fileserver/releases/G2.1.1/SD/sd-release-p4-2024.2-ph4gr2-r20260831180549-G2.1.1.yaml
+
+✅ **PASSED**:
+🔄 **IN PROGRESS**:
+🔒 **ON HOLD**:
+❌ **FAILED**:
+⚠️ **BLOCKED**:

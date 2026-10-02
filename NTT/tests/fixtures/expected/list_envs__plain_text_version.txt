@@ -1,0 +1,9 @@
+**T2.3.31 — Build**
+---
+[**41QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw41_qa/job/Deploy-Parallel/) (T2.3.31)
+[**43QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw43_qa/job/Deploy-Parallel/) (T2.3.31)
+[**44QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw44_qa/job/Deploy-Parallel/) (T2.3.31)
+
+---
+Environment lists:
+- T2.3.31 → 41, 43, 44

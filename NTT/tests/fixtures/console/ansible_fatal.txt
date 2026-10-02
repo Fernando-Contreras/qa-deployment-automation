@@ -1,0 +1,8 @@
+09:10:00  Started by timer
+09:10:05  TASK [apps : stop applications] ************************************************
+09:40:12  fatal: [nttcw81app2]: FAILED! => {"changed": true, "msg": "Timeout (1800s) waiting for WebLogic to stop on /u02/app/NTTWEST/domains/app"}
+09:40:12  ...ignoring nothing
+09:40:13  TASK [apps : report] ***********************************************************
+09:40:13  PLAY RECAP *********************************************************************
+09:40:13  nttcw81app2              : ok=5    changed=1    unreachable=0    failed=1    skipped=0
+09:40:14  Finished: FAILURE

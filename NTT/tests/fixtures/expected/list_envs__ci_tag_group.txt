@@ -1,0 +1,8 @@
+**88CI — Build**
+---
+[**74QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw74_qa/job/Deploy-Parallel/) (88CI)
+[**81QA**](https://sdci.example.com/job/SD.PROJECT/job/nttcw81_qa/job/Deploy-Parallel/) (88CI)
+
+---
+Environment lists:
+- 88CI → 74, 81

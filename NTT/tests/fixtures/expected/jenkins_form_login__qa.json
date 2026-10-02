@@ -1,0 +1,50 @@
+{
+  "calls": [
+    [
+      "page",
+      "wait_for_selector",
+      [
+        "input[name=\"j_username\"]"
+      ],
+      {
+        "timeout": 60000
+      }
+    ],
+    [
+      "input[name=\"j_username\"]",
+      "fill",
+      [
+        "test-user"
+      ],
+      {}
+    ],
+    [
+      "input[name=\"j_password\"]",
+      "fill",
+      [
+        "test-password"
+      ],
+      {}
+    ],
+    [
+      "keyboard",
+      "press",
+      [
+        "Enter"
+      ],
+      {}
+    ],
+    [
+      "page",
+      "wait_for_selector",
+      [
+        "input[name=\"j_username\"]"
+      ],
+      {
+        "state": "detached",
+        "timeout": 180000
+      }
+    ]
+  ],
+  "output": ""
+}
