@@ -314,9 +314,20 @@ def env_tag(env_job: str) -> str:
     return f"[{env_job.upper()}]" if env_job else ""
 
 
-def region_tags(text: str, env_job: str) -> str:
-    """[COM] / [EAST] / [WEST] según las rutas /u02/app/NTT<REGION>/ del log."""
-    found = set(r.upper() for r in re.findall(r"/app/NTT([A-Z]+)/", text, re.I))
+def region_tags(text: str, env_job: str, stage: str = None) -> str:
+    """
+    [COM] / [EAST] / [WEST].
+
+    Primero manda el stage que falló en Jenkins ("Product NRM East"): ese es el
+    lado donde de verdad tronó. La ruta /u02/app/NTT<REGION>/ del log NO es
+    confiable para esto, porque el installer log de un fallo East puede vivir
+    bajo NTTWEST (y el título salía [WEST] con el fallo en East).
+    Solo si el stage no nombra región se usan las rutas del log, y luego el job.
+    """
+    found = set(r.upper() for r in re.findall(r"\b(EAST|WEST|COM)\b", stage or "", re.I))
+
+    if not found:
+        found = set(r.upper() for r in re.findall(r"/app/NTT([A-Z]+)/", text, re.I))
 
     # Si el log no dice nada, al menos el nombre del job suele delatarlo.
     if not found and re.search(r"nttcom", env_job, re.I):
@@ -939,23 +950,116 @@ async def resolve_component_assignees(page, infos):
     return assignees
 
 
-async def find_possible_duplicates(page, env_job):
-    """Avisa si ya reportaste algo parecido de este mismo env hace poco."""
-    if not env_job:
-        return []
+# -------------------------
+# ¿YA ESTÁ REPORTADO?
+# -------------------------
+# Cuántos días hacia atrás se buscan tus defects. Uno abierto de hace meses
+# probablemente ya es otra cosa, y es mejor preguntar que pegar un link viejo.
+REPORTED_LOOKBACK_DAYS = 30
 
+# Mismos estados que excluye tu filtro de Jira: un defect en alguno de estos ya
+# no sirve para "colgarle" un fallo nuevo.
+DONE_STATUSES = {
+    "closed", "resolved", "passed", "passed with minor defects", "cancelled", "failed",
+}
+
+ENV_TAG_RE = re.compile(r"(\d+)\s*(QA|CI)", re.I)
+SUMMARY_RE = re.compile(r"^\s*((?:\[[^\]]+\])+)\s*\|\s*(.+?)\s*$")
+REGION_NAMES = ("COM", "EAST", "WEST")
+
+
+def normalize_env_tag(tag: str):
+    """'[06QA]' / '6qa' -> '6QA' (para que 06QA y 6QA cuenten como el mismo env)."""
+    match = ENV_TAG_RE.fullmatch(tag.strip().strip("[]").strip())
+    return f"{int(match.group(1))}{match.group(2).upper()}" if match else None
+
+
+def parse_defect_summary(summary: str):
+    """
+    '[11QA][EAST][WEST] | Deployment failed on NRM Custom patches' ->
+        {envs: {'11QA'}, regions: {'EAST','WEST'}, items: {'nrm custom patches'}}
+    Regresa None si el summary no tiene el formato de estos tickets.
+    """
+    match = SUMMARY_RE.match(summary or "")
+    if not match:
+        return None
+
+    tags = re.findall(r"\[([^\]]+)\]", match.group(1))
+    failed = re.match(r"deployment failed on (.+)$", match.group(2), re.I)
+    if not failed:
+        return None
+
+    return {
+        "envs": {e for e in (normalize_env_tag(t) for t in tags) if e},
+        "regions": {t.strip().upper() for t in tags if t.strip().upper() in REGION_NAMES},
+        "items": {i.strip().lower() for i in failed.group(1).split(" / ") if i.strip()},
+    }
+
+
+def match_existing_defect(infos, issues):
+    """
+    ¿Alguno de tus defects abiertos ya cubre este grupo de envs?
+    Tiene que cubrir TODOS los envs del grupo y la misma falla; y la región, si
+    ambos la traen, tiene que empalmar al menos en una ([EAST] cubre [EAST][WEST]).
+    issues viene del más nuevo al más viejo, así que gana el más reciente.
+    """
+    want_envs = {normalize_env_tag(i["env_tag"]) for i in infos}
+    want_items = {i["failed_item"].strip().lower() for i in infos}
+    want_regions = set(re.findall(r"\[([A-Z]+)\]", " ".join(i["region_tags"] for i in infos)))
+
+    for issue in issues:
+        if issue["status"].strip().lower() in DONE_STATUSES:
+            continue
+
+        parsed = parse_defect_summary(issue["summary"])
+        if not parsed:
+            continue
+        if not want_envs <= parsed["envs"]:
+            continue
+        if not want_items <= parsed["items"]:
+            continue
+        if want_regions and parsed["regions"] and not (want_regions & parsed["regions"]):
+            continue
+
+        return issue
+
+    return None
+
+
+def related_open_defects(infos, issues):
+    """Defects abiertos que tocan alguno de estos envs, para avisar aunque no sean el mismo."""
+    want_envs = {normalize_env_tag(i["env_tag"]) for i in infos}
+    related = []
+
+    for issue in issues:
+        if issue["status"].strip().lower() in DONE_STATUSES:
+            continue
+        parsed = parse_defect_summary(issue["summary"])
+        if parsed and want_envs & parsed["envs"]:
+            related.append(issue)
+
+    return related
+
+
+async def fetch_reported_defects(page):
+    """
+    Tus defects recientes (lo mismo que el filtro 'Reported by me' de Jira), del
+    más nuevo al más viejo. Si la búsqueda falla regresa [] y el script cae al
+    comportamiento de siempre: preguntar antes de crear.
+    """
     jql = (
-        f'project = {PROJECT_KEY} AND issuetype = {ISSUE_TYPE} '
-        f'AND created >= -14d AND text ~ "{env_job}" ORDER BY created DESC'
+        f"project = {PROJECT_KEY} AND reporter = currentUser() "
+        f"AND created >= -{REPORTED_LOOKBACK_DAYS}d ORDER BY created DESC"
     )
-    url = f"{JIRA_BASE}/rest/api/2/search?jql={quote(jql)}&maxResults=5&fields=summary,status"
+    url = f"{JIRA_BASE}/rest/api/2/search?jql={quote(jql)}&maxResults=200&fields=summary,status"
 
     status, data, _ = await jira_request(page, "GET", url)
-    if status != 200 or not data:
+    if status != 200 or not isinstance(data, dict):
+        print(f"⚠ No pude revisar tus defects existentes (HTTP {status}); sigo preguntando como siempre.")
         return []
 
     return [
-        (i["key"], i["fields"]["summary"], i["fields"]["status"]["name"])
+        {"key": i["key"], "summary": i["fields"]["summary"], "status": i["fields"]["status"]["name"]}
         for i in data.get("issues", [])
     ]
 
@@ -1009,12 +1113,13 @@ async def create_defect(page, fields):
 # -------------------------
 # PREVIEW
 # -------------------------
-def print_preview(group, fields):
+def print_preview(group, fields, number=None, total=1):
     infos = [info for _, info in group]
     line = "=" * 78
+    title = f"DEFECT {number} DE {total}" if number and total > 1 else "DEFECT"
 
     print(f"\n{line}")
-    print("🐞 DEFECT LISTO PARA CREAR"
+    print(f"🐞 {title} LISTO PARA CREAR"
           + (f"  (cubre {len(infos)} envs)" if len(infos) > 1 else ""))
     print(line)
     print(f"Project    : {PROJECT_KEY}")
@@ -1075,7 +1180,7 @@ async def analyze(page, entry, jenkins_user, jenkins_pass, args):
         "pipeline": build_info["pipeline"],
         "build": build_info["build"],
         "env_tag": env_tag(build_info["env_job"]),
-        "region_tags": region_tags(block or log_text, build_info["env_job"]),
+        "region_tags": region_tags(block or log_text, build_info["env_job"], entry.get("stage")),
         "block": block,
         "meta": meta,
         "stage": entry.get("stage"),
@@ -1114,6 +1219,69 @@ def build_fields(infos, args, assignees=None):
         fields["assignee"] = {"name": assignee}
 
     return fields
+
+
+# -------------------------
+# ELEGIR CUÁLES CREAR
+# -------------------------
+ANSWERS_ALL = {"", "y", "yes", "s", "si", "sí", "a", "all", "todos", "todo"}
+ANSWERS_NONE = {"n", "no", "ninguno", "ninguna", "none", "0", "q"}
+
+
+def parse_selection(answer: str, total: int):
+    """
+    Interpreta la respuesta del prompt. Regresa la lista de índices (base 0) a
+    crear, o None si la respuesta no se entiende / se sale de rango.
+
+      Enter, y, todos -> todos        n, ninguno -> ninguno ([])
+      2               -> solo el 2    1,3 ó "1 3" -> el 1 y el 3
+    """
+    answer = answer.strip().lower()
+
+    if answer in ANSWERS_ALL:
+        return list(range(total))
+    if answer in ANSWERS_NONE:
+        return []
+
+    parts = [p for p in re.split(r"[,\s]+", answer) if p]
+    if not parts or not all(p.isdigit() for p in parts):
+        return None
+
+    numbers = [int(p) for p in parts]
+    if any(n < 1 or n > total for n in numbers):
+        return None
+
+    return sorted(set(n - 1 for n in numbers))
+
+
+def choose_defects(prepared, ask=input):
+    """
+    Deja escoger cuáles defects crear. Con un solo defect sigue siendo Y/n; con
+    varios se puede elegir uno, algunos, todos o ninguno.
+    Los que no se escojan no se tocan: su línea del Daily_Envs queda sin link y
+    la siguiente corrida los vuelve a ofrecer.
+    """
+    total = len(prepared)
+
+    if total == 1:
+        prompt = "\n¿Lo creo? [Y/n]: "
+    else:
+        prompt = (f"\n¿Cuáles creo? [Enter = todos, 1-{total} para escoger "
+                  f"(ej. 2 ó 1,3), n = ninguno]: ")
+
+    while True:
+        picked = parse_selection(ask(prompt), total)
+        if picked is None:
+            print(f"   No te entendí. Escribe un número del 1 al {total}, varios separados por coma, "
+                  f"Enter para todos o n para ninguno.")
+            continue
+
+        chosen = [prepared[i] for i in picked]
+        skipped = total - len(chosen)
+        if chosen and skipped:
+            print(f"\n👉 Creo {len(chosen)} de {total}. Los otros {skipped} quedan pendientes "
+                  f"(no se les pega link; la próxima corrida los vuelve a ofrecer).")
+        return chosen
 
 
 # -------------------------
@@ -1165,42 +1333,63 @@ async def run(entries, args, headless, update_file):
             # ---- 3. SESIÓN DE JIRA ----
             await open_jira_session(page, jira_user, jira_pass)
 
-            for entry, info in pending:
-                duplicates = await find_possible_duplicates(page, info["env_job"])
-                open_dupes = [d for d in duplicates if d[2].lower() not in
-                              ("closed", "resolved", "passed", "cancelled")]
-                if open_dupes:
-                    print(f"\n⚠ {entry['label']}: ya hay tickets recientes de este env:")
-                    for key, summary, state in open_dupes:
-                        print(f"   • {key} [{state}] {summary}  →  {JIRA_BASE}/browse/{key}")
+            # ---- 3b. ¿YA ESTÁN REPORTADOS? ----
+            # Si un defect tuyo abierto ya cubre el grupo, no se pregunta ni se crea
+            # nada: solo se le pega su link a la línea del Daily_Envs.
+            reported = await fetch_reported_defects(page)
+            already, to_create = [], []
+
+            for group in groups:
+                infos = [i for _, i in group]
+                existing = match_existing_defect(infos, reported)
+                if existing:
+                    already.append((group, existing))
+                else:
+                    to_create.append(group)
+
+            linked = []
+            for group, existing in already:
+                labels = ", ".join(entry["label"] for entry, _ in group)
+                print(f"\n🔁 {labels} ya está reportado en {existing['key']} [{existing['status']}]")
+                print(f"   {existing['summary']}")
+                print(f"   {JIRA_BASE}/browse/{existing['key']}  → no creo nada, solo pongo el link.")
+                linked.extend((entry, existing["key"]) for entry, _ in group)
+
+            for group in to_create:
+                for issue in related_open_defects([i for _, i in group], reported):
+                    labels = ", ".join(entry["label"] for entry, _ in group)
+                    print(f"\n⚠ {labels}: hay un defect abierto de ese env que no es igual a este:")
+                    print(f"   • {issue['key']} [{issue['status']}] {issue['summary']}  →  {JIRA_BASE}/browse/{issue['key']}")
 
             # ---- 4. PREVIEW ----
-            assignees = await resolve_component_assignees(page, [i for _, i in pending])
+            assignees = await resolve_component_assignees(
+                page, [i for group in to_create for _, i in group]
+            )
             prepared = [
                 (group, build_fields([i for _, i in group], args, assignees))
-                for group in groups
+                for group in to_create
             ]
 
-            for group, fields in prepared:
-                print_preview(group, fields)
+            for number, (group, fields) in enumerate(prepared, 1):
+                print_preview(group, fields, number, len(prepared))
 
-            print(f"\n📋 Listos para crear: {len(prepared)} defect(s) "
-                  f"para {len(pending)} env(s)")
-            for group, fields in prepared:
-                print(f"   • {fields['summary']}")
+            if prepared:
+                print(f"\n📋 Listos para crear: {len(prepared)} defect(s) "
+                      f"para {sum(len(g) for g, _ in prepared)} env(s)")
+                for number, (group, fields) in enumerate(prepared, 1):
+                    print(f"   {number}. {fields['summary']}")
 
             if args.dry_run:
                 print("\n🧪 --dry-run: aquí le paro, no creo nada ni toco el Daily_Envs.")
                 return [], failures
 
-            if not args.yes:
-                answer = input(f"\n¿Creo {'estos' if len(prepared) > 1 else 'este'}? [Y/n]: ").strip().lower()
-                if answer and not answer.startswith("y"):
-                    print("🚪 Cancelado, no se creó nada.")
-                    return [], failures
+            if prepared and not args.yes:
+                prepared = choose_defects(prepared)
+                if not prepared:
+                    print("🚪 No se creó ningún defect nuevo.")
 
             # ---- 5. CREARLOS ----
-            created = []
+            created = list(linked)
             for group, fields in prepared:
                 labels = ", ".join(entry["label"] for entry, _ in group)
                 print(f"\n🚀 Creando el de {labels}...")

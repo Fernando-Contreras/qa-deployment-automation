@@ -19,14 +19,14 @@ DEBUG_PORT = 9222
 # Perfil dedicado: NO toca tu Chrome personal y permite el puerto de debug.
 CHROME_PROFILE = os.path.join(os.environ.get("LOCALAPPDATA", "."), "Temp", "ts_sanity_chrome")
 
-# 192.0.2.4 NO es alcanzable directo: se llega por el tunel SOCKS5 que abre
+# 192.0.2.7 NO es alcanzable directo: se llega por el tunel SOCKS5 que abre
 # el PuTTY de ATP_SIT_Step2. En tu Chrome normal eso lo hacia la extension
 # SwitchyOmega (perfil "SIT ATP"); aqui se lo pasamos a Chrome por linea de
 # comandos, asi no dependemos de ninguna extension.
 TUNNEL_PORT = 8082
 SOCKS_PROXY = f"socks5://127.0.0.1:{TUNNEL_PORT}"
 
-URL = "https://192.0.2.4:8082/project/00000000-0000-4000-8000-000000000004/plan/00000000-0000-4000-8000-000000000005/scopes/00000000-0000-4000-8000-000000000006"
+URL = "https://192.0.2.7:8082/project/00000000-0000-4000-8000-000000000004/plan/00000000-0000-4000-8000-000000000005/scopes/00000000-0000-4000-8000-000000000006"
 
 # Login de Keycloak del ATP de SIT. Ya no va escrito aquí: vive cifrado como
 # las demás cuentas (py Setup_Credentials.py atp_sit_web). La primera vez se pide.
@@ -266,7 +266,7 @@ def bypass_ssl_warning(page):
 def login(page, username, password):
     """
     Llena las credenciales DENTRO de la página (nada de coordenadas ni tabs a ciegas).
-    OJO: el formulario de Keycloak vive en un IFRAME (192.0.2.4:8081),
+    OJO: el formulario de Keycloak vive en un IFRAME (192.0.2.7:8081),
     por eso find_visible() recorre todos los frames y no solo la página.
     """
     user_input = find_visible(
@@ -676,12 +676,12 @@ def run_sanity(web_user, web_password):
 
         page = None
         for candidate in context.pages:
-            if "192.0.2.4" in candidate.url or candidate.url.startswith("chrome-error"):
+            if "192.0.2.7" in candidate.url or candidate.url.startswith("chrome-error"):
                 page = candidate
                 break
         if page is None:
             page = context.pages[0] if context.pages else context.new_page()
-            if "192.0.2.4" not in page.url:
+            if "192.0.2.7" not in page.url:
                 try:
                     page.goto(URL, wait_until="domcontentloaded", timeout=60000)
                 except Exception as e:

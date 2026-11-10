@@ -85,6 +85,19 @@ def no_side_effects(monkeypatch):
     monkeypatch.setattr(builtins, "input", blocked_input)
 
 
+@pytest.fixture(autouse=True)
+def isolated_secret_store(tmp_path, monkeypatch):
+    """
+    Credenciales y sesiones de Jenkins viven cifradas en %LOCALAPPDATA%\\NTT.
+    Una prueba nunca debe leer ni escribir ahí: cargaría TU sesión real de
+    Jenkins (y se volvería distinta según el día), o la pisaría con una de
+    mentira. Todo va a una carpeta temporal.
+    """
+    import nc_credentials
+
+    monkeypatch.setattr(nc_credentials, "STORE_PATH", tmp_path / "secretos" / "credentials.dat")
+
+
 # -------------------------
 # DATOS DE EJEMPLO
 # -------------------------

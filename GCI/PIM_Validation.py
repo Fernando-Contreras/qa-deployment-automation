@@ -89,6 +89,13 @@ PARALLEL_TABS = 4
 # next fix can be made from what the page really looked like.
 FILTER_DEBUG_PREFIX = "pim_filter_debug"
 
+# Once every ticket is done, hand them to Excel_Screenshots.py so the
+# loader screenshots go at the end of the same reports — no pasting the
+# Server Details or the ticket list a second time. AM_Validation gets
+# this through run_excel_screenshots() below. Set to False to stop after
+# the TOMS screenshots.
+RUN_EXCEL_SCREENSHOTS = True
+
 
 def is_offering_url(entry):
     """True if an offering was given as a direct link to its object page
@@ -127,8 +134,8 @@ ANY_URL_RE = re.compile(r"https?://[^\s\"'<>\]]+", re.I)
 
 
 def _looks_like_host(value):
-    """Host-shaped enough to actually dial: "192.0.2.2",
-    "192.0.2.2:6300", "toms.example.com".
+    """Host-shaped enough to actually dial: "192.0.2.4",
+    "192.0.2.4:6300", "toms.example.com".
 
     Underscores rule it out (they're not legal in host names) and so does
     a bare single word with no port — that way an environment code name
@@ -1225,7 +1232,7 @@ Paste offerings — either their names or their object URLs
 
     SAMSUNG GALAXY Z FOLD8 ULTRA 256GB
         or
-    http://192.0.2.2:6300/ncobject.jsp?id=9176805427065294059
+    http://192.0.2.4:6300/ncobject.jsp?id=9176805427065294059
 
 Finish with two empty lines.
 
@@ -2732,7 +2739,7 @@ async def ensure_toms_session(search_page: Page, toms_state: dict):
         raise RuntimeError(
             "No usable TOMS address in the pasted Server Details, so "
             "there's nowhere to search offerings by name. Add a line "
-            "like \"TOMS: http://192.0.2.2:6300\", or give the "
+            "like \"TOMS: http://192.0.2.4:6300\", or give the "
             "offerings as URLs."
         )
 
@@ -2859,6 +2866,53 @@ async def process_ticket(
     _save_word_document(word_path)
     print(f"💾 Saved (left open in Word): {word_path}")
 
+    # What the loader pass needs to carry on without asking anything
+    # again.
+    return ticket, title, offerings
+
+
+
+# -------------------------
+# THE LOADER PASS
+# -------------------------
+
+async def run_excel_screenshots(context, raw_text, collected):
+    """Hand the finished tickets to Excel_Screenshots.py.
+
+    Shared by this script and AM_Validation, so the two trigger it the
+    same way. `collected` is the (ticket, title, products) of every
+    ticket that got through, and `raw_text` is the block pasted at the
+    start — between them the loader pass knows everything it needs, so
+    nothing is asked twice.
+
+    Imported here rather than at the top: Excel_Screenshots imports this
+    module, and importing it back at module level would be a loop. It
+    also means a problem in that script can't stop this one from
+    running."""
+
+    if not RUN_EXCEL_SCREENSHOTS:
+        return
+
+    if not collected:
+        return
+
+    try:
+        import Excel_Screenshots as excel
+    except Exception as e:
+        print(
+            f"⚠ Couldn't load Excel_Screenshots.py ({e}) — the TOMS "
+            "screenshots are saved; the loader ones were skipped."
+        )
+        return
+
+    try:
+        await excel.continue_from_validation(context, raw_text, collected)
+    except Exception as e:
+        print(
+            f"⚠ The loader screenshots stopped: {e} — the reports so far "
+            "are still saved."
+        )
+
 
 
 # -------------------------
@@ -2948,20 +3002,27 @@ async def main():
         toms_state = {"ready": False, "object_url": object_url}
 
 
+        collected = []
+
         for ticket in tickets:
             try:
-                await process_ticket(
-                    context,
-                    search_page,
-                    ticket,
-                    server_details,
-                    toms_state
+                collected.append(
+                    await process_ticket(
+                        context,
+                        search_page,
+                        ticket,
+                        server_details,
+                        toms_state
+                    )
                 )
             except Exception as e:
                 print(
                     f"⚠ Problem on ticket {ticket}: {e} — "
                     "moving on to the next ticket."
                 )
+
+
+        await run_excel_screenshots(context, raw_text, collected)
 
 
         print(

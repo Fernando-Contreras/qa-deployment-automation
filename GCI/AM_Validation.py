@@ -10,10 +10,10 @@ and for every ticket this:
   3. per device: filters the grid by Name, screenshots the result row
      (Name / SKU / Equipment Type / Brand / State), opens the device and
      screenshots its Parameters page (SKU, Color, Brand, Storage, ...);
-  4. puts it all in Downloads\\<TICKET>.docx.
-
-Comparing against the loader (NC.GCI.Polaris.DSG.AM.Configuration.xlsx)
-is still done by hand.
+  4. puts it all in Downloads\\<TICKET>.docx;
+  5. hands the tickets to Excel_Screenshots.py, which adds the loader
+     screenshots to the end of those same reports and offers to put
+     them on the tickets — no pasting anything a second time.
 
 Everything TOMS/Jira/Word-related is borrowed from PIM_Validation.py, so
 a fix there (login, filter, Word dialogs) fixes this one too.
@@ -258,6 +258,10 @@ async def process_ticket(context, search_page, ticket, server_details, state):
     for d in devices:
         print(f"  - {d}")
 
+    # Kept whole: `devices` is trimmed below when a run resumes, but the
+    # loader pass at the end wants every device of the ticket.
+    all_devices = list(devices)
+
     if any(not pim.is_offering_url(d) for d in devices):
         await open_stock_items(search_page, state)
 
@@ -285,6 +289,10 @@ async def process_ticket(context, search_page, ticket, server_details, state):
 
     pim._save_word_document(word_path)
     print(f"💾 Saved (left open in Word): {word_path}")
+
+    # Handed to the loader pass at the end of the run, so it doesn't have
+    # to ask for any of this again.
+    return ticket, title, all_devices
 
 
 # -------------------------
@@ -335,16 +343,24 @@ async def main():
 
         state = {"ready": False, "url": url}
 
+        collected = []
+
         for ticket in tickets:
             try:
-                await process_ticket(
-                    context, search_page, ticket, server_details, state
+                collected.append(
+                    await process_ticket(
+                        context, search_page, ticket, server_details, state
+                    )
                 )
             except Exception as e:
                 print(
                     f"⚠ Problem on ticket {ticket}: {e} — "
                     "moving on to the next ticket."
                 )
+
+        # Straight into the loader screenshots, on the same tickets and
+        # the same Server Details.
+        await pim.run_excel_screenshots(context, raw_text, collected)
 
         print(
             """

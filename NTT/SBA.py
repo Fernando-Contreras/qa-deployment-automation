@@ -15,12 +15,16 @@ from pathlib import Path
 from playwright.async_api import Page, async_playwright
 
 import ntt_config
+from jenkins_web import new_context_with_session, persist_session, saved_session
 from nc_credentials import get_credentials
 
 JENKINS_URL = (
     "https://taci.example.com/job/SD.NTT/job/TA/job/"
     "NTT_SBA_Testing_Tool/build?delay=0sec"
 )
+# Otro servidor (taci): su sesión va en su propio archivo, para no pisar la
+# de sdci/snapci que comparten los demás scripts.
+SBA_SESSION_NAME = "jenkins_sba"
 # Credenciales cifradas (DPAPI). La primera vez las pide y las guarda.
 JENKINS_USER, JENKINS_PASSWORD = get_credentials(
     "jenkins", default_username=ntt_config.JENKINS_DEFAULT_USER
@@ -31,7 +35,7 @@ BUILD_NUMBER_RE = re.compile(r"NTT_SBA_Testing_Tool/(\d+)(?:/|$)")
 BUILD_HASH_RE = re.compile(r"#(\d+)")
 
 REPORT_LINK_RE = re.compile(
-    r"http://192\.0\.2\.3:9312/sheet-based\?report=[^\s'\"<>&]+",
+    r"http://192\.0\.2\.6:9312/sheet-based\?report=[^\s'\"<>&]+",
     re.IGNORECASE,
 )
 NULL_REPORT_MARKER = "report=null"
@@ -997,12 +1001,16 @@ async def run_jenkins(entries: list[SBAEntry]):
 
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(headless=False)
-        context = await browser.new_context()
+        context = await new_context_with_session(browser, saved_session(SBA_SESSION_NAME))
         page = await context.new_page()
 
         await page.goto(JENKINS_URL, wait_until="domcontentloaded", timeout=180000)
         await ensure_logged_in(page)
         await wait_for_job_form(page)
+        # Se guarda hasta que el formulario del job ya cargó (prueba de que sí
+        # entró): ensure_logged_in sólo espera domcontentloaded y podría
+        # resolver antes de que el login termine.
+        await persist_session(context, SBA_SESSION_NAME)
         excel_options = await wait_for_excel_options(page)
 
         if excel_options:

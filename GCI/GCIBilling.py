@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 import os
+import re
 import subprocess
 from collections import OrderedDict
 import sys
@@ -16,7 +17,7 @@ ENV_MAP = {
     "UAT1": "infgca7",
     "UAT2": "infgca5",
     "UAT3": "infgca1",
-    "NC2": "infgca3",
+    "NC2": "infgba3",
     "B2B": "infgca3",
 }
 
@@ -97,6 +98,40 @@ def copy_to_clipboard(text):
     except Exception as e:
         print(f"⚠️ Could not copy first SQL to clipboard: {e}")
 
+LIST_PREFIX = re.compile(r"^\s*(?:\d{1,3}[.)]|[-*•])\s+")
+ACCOUNT_TOKEN = re.compile(r"^[A-Za-z0-9_-]*\d[A-Za-z0-9_-]*$")
+
+def extract_accounts(line):
+    """Return the account numbers found in one pasted line (plain list, comma list, or '1. 101102050909 NAME')."""
+    line = LIST_PREFIX.sub("", line).strip()
+    if not line:
+        return []
+
+    if "," in line:
+        parts = [p.strip() for p in line.split(",") if p.strip()]
+        if parts and all(ACCOUNT_TOKEN.match(p) for p in parts):
+            return parts
+
+    words = line.split()
+    first = words[0].rstrip(".,:;")
+    if re.fullmatch(r"\d{6,}", first):
+        return [first]
+    if len(words) == 1 and ACCOUNT_TOKEN.match(first):
+        return [first]
+    return []
+
+MOBILEPASS_EXE = r"C:\Program Files (x86)\SafeNet\Authentication\MobilePASS\MobilePASS.exe"
+CHROME_EXE = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
+CITRIX_URL = "https://ctx.example.com/Citrix/CsdeWeb/"
+
+def open_mobilepass_and_citrix():
+    try:
+        subprocess.Popen([MOBILEPASS_EXE])
+        subprocess.Popen([CHROME_EXE, CITRIX_URL])
+        print("🔐 MobilePASS and Citrix opened.")
+    except Exception as e:
+        print(f"⚠️ Could not open MobilePASS/Citrix: {e}")
+
 print("Environments: UAT1, UAT2, UAT3, NC2, B2B")
 env_choice = input("Environment: ").strip().upper()
 
@@ -115,19 +150,29 @@ else:
 ticket = input("Ticket number (e.g. 16540): ").strip()
 
 # First, collect account numbers
-print("\nEnter account numbers (comma separated OR one per line).")
+print("\nPaste the account numbers (plain list, comma separated, or the full email text).")
 print("Finish with empty line:")
 accounts = []
+ignored = []
 while True:
     line = input().strip()
     if not line:
-        break
-    parts = [p.strip() for p in line.split(",") if p.strip()]
-    accounts.extend(parts)
+        if accounts:
+            break
+        continue
+    found = extract_accounts(line)
+    if found:
+        accounts.extend(found)
+    else:
+        ignored.append(line)
 
-if not accounts:
-    print("❌ No accounts provided.")
-    exit(1)
+accounts = list(OrderedDict.fromkeys(accounts))
+
+if ignored:
+    print(f"\nℹ️ Ignored {len(ignored)} line(s) with no account number:")
+    for text in ignored:
+        print(f"   - {text[:70]}")
+print(f"✅ {len(accounts)} account(s) detected: {', '.join(accounts)}")
 
 # Print SQL to check NBDs
 first_sql_lines = ["SELECT * FROM account WHERE account_num in ("]
@@ -143,6 +188,7 @@ print("\nRun this SQL to check NBDs:\n")
 print(first_sql)
 print("")
 copy_to_clipboard(first_sql)
+open_mobilepass_and_citrix()
 
 # Ask if there are multiple NBDs (only makes sense with more than one account)
 if len(accounts) == 1:

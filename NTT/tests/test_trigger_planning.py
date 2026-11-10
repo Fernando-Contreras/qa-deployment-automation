@@ -110,22 +110,39 @@ def test_qa_flags():
     assert qa.parse_args(["--f", "--ask"]) == (False, True, True)
 
 
+SNAP_NO_TENANT = "nttcw46_qa_54086/nttcw46_qa_nitro_snapshot_ci_20261103"
+SNAP_T4 = "nttcw46_qa_54086/nttcw46_qa_nitro_snapshot_ci_20261103_T4"
+
+
 def test_qa_full_auto_skips_snapshots_without_a_tenant(monkeypatch):
     monkeypatch.setattr(qa, "AUTO_TENANT", "")
     sd = deployment(env="06")
-    snapshot = deployment(env="11", patch=SNAP)
+    snapshot = deployment(env="11", patch=SNAP_NO_TENANT)
 
     targets = qa.targets_from_deployments([sd, snapshot], interactive=False)
 
     assert targets == [{"env": "06", "payload": SD, "snapshot_mode": False, "tenant": None}]
 
 
-def test_qa_full_auto_uses_the_configured_tenant(monkeypatch):
+def test_qa_full_auto_uses_the_configured_tenant_when_the_name_has_none(monkeypatch):
     monkeypatch.setattr(qa, "AUTO_TENANT", "4")
 
-    targets = qa.targets_from_deployments([deployment(env="11", patch=SNAP)], interactive=False)
+    targets = qa.targets_from_deployments([deployment(env="11", patch=SNAP_NO_TENANT)], interactive=False)
 
-    assert targets == [{"env": "11", "payload": SNAP, "snapshot_mode": True, "tenant": "4"}]
+    assert targets == [{"env": "11", "payload": SNAP_NO_TENANT, "snapshot_mode": True, "tenant": "4"}]
+
+
+def test_qa_full_auto_takes_the_tenant_from_the_snapshot_name(monkeypatch):
+    """_T4 al final del nombre = tenant 4, sin preguntar ni QA_ENVS_TENANT.
+    El nombre manda aunque el env var diga otra cosa."""
+    monkeypatch.setattr(qa, "AUTO_TENANT", "")
+
+    targets = qa.targets_from_deployments([deployment(env="43", patch=SNAP_T4)], interactive=False)
+    assert targets == [{"env": "43", "payload": SNAP_T4, "snapshot_mode": True, "tenant": "4"}]
+
+    monkeypatch.setattr(qa, "AUTO_TENANT", "9")
+    targets = qa.targets_from_deployments([deployment(env="43", patch=SNAP_T4)], interactive=False)
+    assert targets[0]["tenant"] == "4"
 
 
 def test_qa_force_triggers_everything_in_progress_without_checking_jenkins(daily_envs):

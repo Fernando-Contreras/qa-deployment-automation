@@ -14,7 +14,13 @@ from nc_credentials import LoginError, get_credentials
 # QA_Envs.py para que los dos decidan igual.
 import Daily_Envs_Plan as plan
 import Track_Deployments as td
-from jenkins_web import JenkinsForm
+from pages import JenkinsBuildPage, JenkinsLoginPage
+from jenkins_web import (
+    JenkinsForm,
+    new_context_with_session,
+    persist_session,
+    saved_session,
+)
 from ntt_config import SNAPCI, SDCI, JENKINS_DEFAULT_USER, JENKINS_FOLDER
 
 # Credenciales cifradas (DPAPI). La primera vez las pide y las guarda.
@@ -39,6 +45,7 @@ log = _form.log
 format_progress = _form.format_progress
 wait_for_job_form = _form.wait_for_job_form
 do_login = _form.do_login
+login_if_needed = _form.login_if_needed
 click_checkbox_by_label = _form.click_checkbox_by_label
 click_build = _form.click_build
 get_editable_value_field = _form.get_editable_value_field
@@ -155,14 +162,9 @@ def candidate_build_urls(source_url: str, env: str, snapshot_mode: bool):
     return unique
 
 
-# Los snapshots terminan en _T<numero> y ese numero es el tenant:
-# ..._nitro_snapshot_ci_20260921_T5  ->  QATENANT_5
-TENANT_SUFFIX_RE = re.compile(r"_T(\d+)\s*$", re.IGNORECASE)
-
-
-def tenant_from_snapshot(snapshot: str):
-    match = TENANT_SUFFIX_RE.search((snapshot or "").strip())
-    return match.group(1) if match else None
+# La regla del tenant (sufijo _T<numero> del snapshot) vive en Daily_Envs_Plan,
+# compartida con QA_Envs.py.
+tenant_from_snapshot = plan.tenant_from_snapshot
 
 
 def alternate_snapshot_urls(url: str):
@@ -404,21 +406,19 @@ async def run_env(
 
     async with semaphore:
         try:
-            page = await context.new_page()
+            jenkins = JenkinsBuildPage(await context.new_page(), _form, env)
             used_url = await open_job_form(
-                page, env, target["source_url"], target["snapshot_mode"]
+                jenkins.page, env, target["source_url"], target["snapshot_mode"]
             )
             note_link_fix(target, used_url)
 
             if target["snapshot_mode"]:
                 await configure_snapshot(
-                    page, target["payload"], target["tenant"],
+                    jenkins.page, target["payload"], target["tenant"],
                     env, current_index, total_envs,
                 )
             else:
-                await configure_sd_file(
-                    page, target["payload"], env, current_index, total_envs
-                )
+                await jenkins.deploy_sd_file(target["payload"], current_index, total_envs)
 
             return (env, True, None)
         except Exception as exc:
@@ -547,9 +547,12 @@ async def plan_from_daily_envs(pw):
 
     # El chequeo va sin ventana: no hay nada que mirar y es mas rapido.
     check_browser = await pw.chromium.launch(headless=True)
-    check_context = await check_browser.new_context()
+    check_context = await new_context_with_session(check_browser, saved_session())
     try:
         await td.check_all_deployments(check_context, deployments)
+        # Ya autenticados: se guarda para el siguiente script (y para el
+        # trigger de abajo, que lo carga del disco).
+        await persist_session(check_context)
         # Un env sin fecha casi siempre es un link viejo en el Daily_Envs,
         # asi que antes de rendirse se prueba el otro nombre de job.
         await retry_unknown_links(check_context, deployments)
@@ -583,24 +586,27 @@ async def trigger_targets(pw, targets, headless, max_parallel):
     print(f"\n⚡ {total_envs} env(s), hasta {parallel} en paralelo (headless={headless}).\n")
 
     browser = await pw.chromium.launch(headless=headless)
-    context = await browser.new_context()
+    context = await new_context_with_session(browser, saved_session())
 
     # Login una sola vez por host: la cookie queda en el context y todas
     # las pestanas paralelas la heredan. Los snapshots viven en snapci y
-    # los SD en sdci, asi que se loguea donde haga falta.
+    # los SD en sdci, asi que se loguea donde haga falta. Con la sesion
+    # guardada ni aparece el formulario (login_if_needed no espera a que salga).
     hosts = {
         SNAPSHOT_HOST if target["snapshot_mode"] else SD_HOST
         for target in targets
     }
+    logged_in_now = False
     for host in sorted(hosts):
-        login_page = await context.new_page()
-        await login_page.goto(
-            f"{host}{FOLDER_PATH}", wait_until="domcontentloaded", timeout=1200000
-        )
+        login_page = JenkinsLoginPage(await context.new_page(), _form)
+        await login_page.open(f"{host}{FOLDER_PATH}")
         print(f"🔐 Logging in ({host})...")
-        await do_login(login_page)
+        if await login_page.sign_in():
+            logged_in_now = True
         print("✅ Logged in.")
         await login_page.close()
+    if logged_in_now:
+        await persist_session(context)
     print("")
 
     semaphore = asyncio.Semaphore(parallel)

@@ -11,8 +11,13 @@ from urllib.parse import urlparse
 from playwright.async_api import async_playwright
 
 import ntt_config
-from jenkins_web import fetch_json_from_browser
-from nc_credentials import LoginError, get_credentials
+from jenkins_web import (
+    SESSION_NAME,
+    fetch_json_from_browser,
+    new_context_with_session,
+    persist_session,
+)
+from nc_credentials import LoginError, get_credentials, load_session_state
 
 FILE_PATH = str(ntt_config.DAILY_ENVS_PATH)
 
@@ -916,6 +921,12 @@ async def get_build_info_via_dom(page, url):
     }
 
 
+# La sesión de Jenkins guardada entre corridas (SESSION_NAME, new_context_with_
+# session, persist_session) vive en jenkins_web.py: la comparten QA_Envs,
+# COM_Envs y MailQAs. Con ella no hay que loguearse en cada corrida: 520 de
+# las 702 corridas medidas pagaban 1-2 logins.
+
+
 async def open_session_page(context, url):
     """Abre UNA pestaña por servidor y hace login ahí; las demás heredan la cookie."""
     page = await context.new_page()
@@ -1513,7 +1524,10 @@ async def main():
             # Revisar status (incluye el login) corre invisible: no hay razón
             # para que veas esa pestaña, y antes se confundía con un env fallido.
             check_browser = await pw.chromium.launch(headless=True)
-            check_context = await check_browser.new_context()
+            check_context = await new_context_with_session(
+                check_browser, load_session_state(SESSION_NAME)
+            )
+            session_state = None
 
             passed = []
             failed = []
@@ -1521,6 +1535,9 @@ async def main():
 
             try:
                 statuses = await check_all_deployments(check_context, deployments)
+                # Ya autenticados: se guarda la sesión para la próxima corrida
+                # (y para el segundo navegador, que así no vuelve a loguearse).
+                session_state = await persist_session(check_context)
             except LoginError as e:
                 print(e)
                 print("\nNo se revisó nada ni se tocó Daily_Envs.txt.")
@@ -1539,7 +1556,9 @@ async def main():
                     visible_browser = await pw.chromium.launch(
                         headless=not is_interactive()
                     )
-                    visible_context = await visible_browser.new_context()
+                    visible_context = await new_context_with_session(
+                        visible_browser, session_state
+                    )
                 return visible_context
 
             now = datetime.now()

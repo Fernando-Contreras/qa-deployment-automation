@@ -12,7 +12,12 @@ import win32com.client as win32
 from playwright.async_api import async_playwright
 
 import ntt_config
-from jenkins_web import fetch_json_from_browser
+from jenkins_web import (
+    fetch_json_from_browser,
+    new_context_with_session,
+    persist_session,
+    saved_session,
+)
 from nc_credentials import LoginError, get_credentials
 
 
@@ -59,6 +64,24 @@ status_map = {
     "BLOCKED": "Blocked",
     "SKIPPED": "Skipped",
 }
+
+
+STATUS_HEADER_RE = re.compile(
+    r"\*\*\s*(IN PROGRESS|ON HOLD|PASSED|FAILED|BLOCKED|SKIPPED)\s*\*\*",
+    re.IGNORECASE,
+)
+
+
+def match_status_header(line):
+    """Estado que abre una línea de encabezado, o None.
+
+    Acepta texto después del estado ("**ON HOLD** till QA team finishes:"),
+    no sólo "**ON HOLD**:". Una línea de env nunca cuenta como encabezado.
+    """
+    if ENV_LABEL_RE.search(line):
+        return None
+    match = STATUS_HEADER_RE.search(line)
+    return status_map[match.group(1).upper()] if match else None
 
 
 def version_key(version):
@@ -218,13 +241,9 @@ def get_checkable_envs(lines):
     current_status = None
 
     for line in lines:
-        line_clean = line.strip().upper()
-
-        match_status = re.search(r"\*\*\s*(.*?)\s*\*\*:", line_clean)
-        if match_status:
-            key = match_status.group(1)
-            if key in status_map:
-                current_status = status_map[key]
+        header_status = match_status_header(line)
+        if header_status:
+            current_status = header_status
             continue
 
         if (
@@ -684,9 +703,9 @@ def parse_daily_env_statuses(path):
     current_status = None
 
     for raw_line in get_selected_daily_env_text(path).splitlines():
-        status_match = re.search(r"\*\*\s*([A-Z ]+)\s*\*\*:", raw_line, re.IGNORECASE)
-        if status_match:
-            current_status = status_map.get(status_match.group(1).strip().upper())
+        header_status = match_status_header(raw_line)
+        if header_status:
+            current_status = header_status
             continue
 
         if not current_status or "Deploy-Parallel" not in raw_line:
@@ -770,13 +789,9 @@ def parse_daily_env_rows(path):
     current_status = None
 
     for line in get_selected_daily_env_text(path).splitlines():
-        line_clean = line.strip().upper()
-
-        match_status = re.search(r"\*\*\s*(.*?)\s*\*\*:", line_clean)
-        if match_status:
-            key = match_status.group(1)
-            if key in status_map:
-                current_status = status_map[key]
+        header_status = match_status_header(line)
+        if header_status:
+            current_status = header_status
             continue
 
         if not ENV_LABEL_RE.search(line) or "(" not in line:
@@ -807,13 +822,11 @@ def update_excel_env_rows(ws):
     row = 5
     while ws.Cells(row, 7).Value:
         ws.Cells(row, 7).Value = ""
-        ws.Cells(row, 24).Value = ""
         row += 1
 
     row = 5
     for _, env, version, status in envs:
         ws.Cells(row, 7).Value = f"{env} ({version})"
-        ws.Cells(row, 24).Value = status or ""
         row += 1
 
     return row - 1
@@ -902,11 +915,14 @@ def update_excel_with_patch_results(log_path):
             in_progress_env = False
             written_patch_statuses = []
 
+            planned = []  # [col, status, confirmed_passed]
+
             for stage_key, header in patch_order:
                 col = stage_columns.get(stage_key)
                 if not col:
                     continue
 
+                confirmed_passed = False
                 if failed_found:
                     status = "Blocked"
                 elif in_progress_found:
@@ -922,6 +938,8 @@ def update_excel_with_patch_results(log_path):
                     # must be Passed - a patch column is never left "Skipped".
                     if not status or status == "Skipped":
                         status = "Passed"
+                    else:
+                        confirmed_passed = status == "Passed"
                     if status == "Failed":
                         failed_found = True
                         failed_env = True
@@ -929,6 +947,24 @@ def update_excel_with_patch_results(log_path):
                         in_progress_found = True
                         in_progress_env = True
 
+                planned.append([col, status, confirmed_passed])
+
+            # Every env in the log is In Progress in Daily_Envs.txt. If Jenkins
+            # didn't flag any stage as running (empty stage list, build between
+            # stages, ...), nothing past the last confirmed Passed can be Passed:
+            # that spot is where the deployment is, and everything to its right
+            # is In Progress too.
+            if planned and not failed_found and not in_progress_found:
+                last_confirmed = max(
+                    (i for i, item in enumerate(planned) if item[2]), default=-1
+                )
+                if last_confirmed + 1 < len(planned):
+                    for item in planned[last_confirmed + 1:]:
+                        item[1] = "In Progress"
+                    in_progress_found = True
+                    in_progress_env = True
+
+            for col, status, _ in planned:
                 write_status_cell(ws.Cells(row, col), status, status_formats)
                 written_patch_statuses.append(status)
                 updated += 1
@@ -964,6 +1000,10 @@ def update_excel_with_patch_results(log_path):
                         overall_status = "Passed"
                     elif written_patch_statuses:
                         overall_status = combine_statuses(written_patch_statuses)
+
+            if overall_status == "In Progress" and sanity_status != "Blocked":
+                # Sanity waits (On Hold) for as long as the env is In Progress.
+                sanity_status = "On Hold"
 
             if sanity_status and sanity_key in stage_columns:
                 write_status_cell(ws.Cells(row, stage_columns[sanity_key]), sanity_status, status_formats)
@@ -1047,13 +1087,15 @@ async def check_jenkins_and_update_excel(checkable_envs):
 
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(headless=True)
-        context = await browser.new_context()
+        context = await new_context_with_session(browser, saved_session())
 
-        # Login una sola vez; las demás pestañas heredan la cookie.
+        # Login una sola vez; las demás pestañas heredan la cookie. Con la
+        # sesión guardada (la mantiene viva Track_Deployments) ni hace falta.
         warmup = await context.new_page()
         await warmup.goto(urls[0].rstrip("/") + "/", timeout=60000)
         await warmup.wait_for_load_state("domcontentloaded")
         await ensure_logged_in(warmup)
+        await persist_session(context)
         await warmup.close()
 
         semaphore = asyncio.Semaphore(CONCURRENCY)
@@ -1136,13 +1178,9 @@ def main():
     current_status = None
 
     for line in lines:
-        line_clean = line.strip().upper()
-
-        match_status = re.search(r"\*\*\s*(.*?)\s*\*\*:", line_clean)
-        if match_status:
-            key = match_status.group(1)
-            if key in status_map:
-                current_status = status_map[key]
+        header_status = match_status_header(line)
+        if header_status:
+            current_status = header_status
             continue
 
         if ENV_LABEL_RE.search(line) and "(" in line:
@@ -1219,7 +1257,6 @@ def main():
         clear_cell(ws.Cells(row, 4))
         clear_cell(ws.Cells(row, 5))
         clear_cell(ws.Cells(row, 7))
-        clear_cell(ws.Cells(row, 24))
         row += 1
 
     row = 5
@@ -1238,7 +1275,6 @@ def main():
             ws.Cells(row, 5).Value = failed["patch"]
 
         ws.Cells(row, 7).Value = f"{env} ({version})"
-        ws.Cells(row, 24).Value = status or ""
         if status == "Passed":
             mark_passed_row(ws, row, patch_status_columns, status_formats)
         elif status == "Failed":
@@ -1292,14 +1328,14 @@ def main():
     if doc.Tables.Count > tables_before_ticket:
         # Column D (ticket link) pastes left-aligned and blue by default -
         # force it centered with white text, skipping the header row.
+        # One cell at a time: a Range from cell (2,3) to cell (N,3) is one
+        # continuous stretch of text, so it would also whiten every cell
+        # that sits between them (e.g. the "Deployment Status" column).
         ticket_table = doc.Tables(doc.Tables.Count)
-        if ticket_table.Rows.Count > 1:
-            ticket_range = doc.Range(
-                Start=ticket_table.Cell(2, 3).Range.Start,
-                End=ticket_table.Cell(ticket_table.Rows.Count, 3).Range.End,
-            )
-            ticket_range.Font.Color = wdColorWhite
-            ticket_range.ParagraphFormat.Alignment = wdAlignParagraphCenter
+        for table_row in range(2, ticket_table.Rows.Count + 1):
+            ticket_cell_range = ticket_table.Cell(table_row, 3).Range
+            ticket_cell_range.Font.Color = wdColorWhite
+            ticket_cell_range.ParagraphFormat.Alignment = wdAlignParagraphCenter
 
     selection.TypeParagraph()
 

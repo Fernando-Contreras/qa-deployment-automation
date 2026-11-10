@@ -587,4 +587,6 @@ def main(run_webex: bool = True):
 
 
 if __name__ == "__main__":
-    main()
+    # --no-webex: solo ordena el archivo, sin sincronizar Webex (para quien lo
+    # lanza como paso intermedio, ej. List_Envs al arrancar al primer env).
+    main(run_webex="--no-webex" not in sys.argv[1:])

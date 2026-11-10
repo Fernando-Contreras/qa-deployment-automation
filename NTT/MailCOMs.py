@@ -9,9 +9,9 @@ Reutiliza el login/token de Webex de Webex_Update.py (misma sala, mismo
 Personal Access Token / OAuth ya configurado). Al final, igual que
 MailQAs.py, borra de Daily_Envs.txt el bloque cuyos envs ya se mandaron.
 
-Por ahora no toca Deployment Status / Sanity Status / Comments (columnas
-E, F, G de la tabla): esas se llenan a mano en Excel. Ya después se
-perfecciona.
+Llena Environment (D), Deployment Status (E) y Sanity Status (F) segun la
+seccion de Webex donde cae cada env (PASSED, BLOCKED, ON HOLD...), con el
+formato de la leyenda de la fila 28. Comments (G) se llena a mano.
 """
 
 import re
@@ -40,7 +40,37 @@ LOOKBACK_HOURS = 36
 
 COM_ENV_RE = re.compile(r"(COM\d+QA)", re.IGNORECASE)
 CI_TOKEN_RE = re.compile(r"(CI_\d+(?:\s+SS)?)", re.IGNORECASE)
-SECTION_RE = re.compile(r"\*\*\s*([A-Z ]+?)\s*\*\*\s*:", re.IGNORECASE)
+SECTION_RE = re.compile(
+    r"\*\*\s*(PASSED|IN PROGRESS|ON HOLD|FAILED|BLOCKED|SKIPPED)\s*\*\*", re.IGNORECASE
+)
+
+STATUS_NAMES = {
+    "PASSED": "Passed",
+    "IN PROGRESS": "In Progress",
+    "ON HOLD": "On Hold",
+    "FAILED": "Failed",
+    "BLOCKED": "Blocked",
+    "SKIPPED": "Skipped",
+}
+
+DEPLOY_COL = 5  # E
+SANITY_COL = 6  # F
+
+# Celdas de la leyenda (fila 28 de "COM envs") de donde se copia el formato
+# de cada status, igual que MailQAs con sus celdas de ejemplo.
+STATUS_TEMPLATE_CELLS = {
+    "Passed": "D28",
+    "On Hold": "E28",
+    "In Progress": "F28",
+    "Skipped": "G28",
+    "Blocked": "H28",
+    "Failed": "I28",
+}
+
+# Lo que va en Sanity Status segun el status del deployment.
+SANITY_TEXT = {"Passed": "Passed w/m", "In Progress": "On Hold", "Failed": "Blocked"}
+# Verde claro (E2EFDA) de "Passed w/m"; Excel guarda el color como BGR.
+PASSED_WM_COLOR = 226 + 239 * 256 + 218 * 65536
 
 # Mismos patrones que MailQAs.py usa para partir Daily_Envs.txt en bloques y
 # sacar los envs de cada uno (aqui van sueltos para no tener que importar
@@ -64,20 +94,21 @@ def normalize_ci_label(raw):
     return re.sub(r"\s+", " ", raw.strip()).upper()
 
 
-def extract_passed_com_envs(text):
-    """Saca 'COM3QA (CI_07)' de la seccion PASSED de un mensaje de Webex.
-    Ignora todo lo demas (otros status, links sueltos, etc.) y no repite envs."""
+def extract_com_envs(text):
+    """Saca [('COM3QA (CI_07)', 'Passed'), ...] de un mensaje de Webex, con el
+    status de la seccion (PASSED, BLOCKED, ON HOLD...) en la que cae cada env.
+    Ignora lo demas y no repite envs."""
     envs = []
     seen = set()
-    in_passed = False
+    status = None
 
     for line in (text or "").splitlines():
         section_match = SECTION_RE.search(line)
         if section_match:
-            in_passed = section_match.group(1).strip().upper() == "PASSED"
+            status = STATUS_NAMES[section_match.group(1).strip().upper()]
             continue
 
-        if not in_passed:
+        if status is None:
             continue
 
         env_match = COM_ENV_RE.search(line)
@@ -88,7 +119,7 @@ def extract_passed_com_envs(text):
         label = f"{normalize_env_label(env_match.group(1))} ({normalize_ci_label(ci_match.group(1))})"
         if label not in seen:
             seen.add(label)
-            envs.append(label)
+            envs.append((label, status))
 
     return envs
 
@@ -135,8 +166,8 @@ def remove_com_block_from_daily_envs(path, envs):
 
 
 def find_latest_com_envs(room=None, lookback_hours=LOOKBACK_HOURS):
-    """Token/sala/mensajes via Webex_Update; regresa (envs, mensaje) del mas
-    reciente que traiga envs COM en PASSED, o ([], None) si no hay ninguno."""
+    """Token/sala/mensajes via Webex_Update; regresa ([(env, status)], mensaje)
+    del mas reciente que traiga envs COM, o ([], None) si no hay ninguno."""
     room = room or webex.DEFAULT_ROOM
     since_utc = datetime.now(timezone.utc) - timedelta(hours=lookback_hours)
 
@@ -150,7 +181,7 @@ def find_latest_com_envs(room=None, lookback_hours=LOOKBACK_HOURS):
 
     for message in reversed(messages):  # el mas nuevo primero
         text = message.get("markdown") or message.get("text") or ""
-        envs = extract_passed_com_envs(text)
+        envs = extract_com_envs(text)
         if envs:
             return envs, message
 
@@ -182,13 +213,44 @@ def clear_cell(cell):
     cell.Value = ""
 
 
+def get_status_formats(ws):
+    formats = {}
+    for status, address in STATUS_TEMPLATE_CELLS.items():
+        source = ws.Range(address)
+        formats[status] = {
+            "interior_color": source.Interior.Color,
+            "font_color": source.Font.Color,
+            "bold": source.Font.Bold,
+            "horizontal_alignment": source.HorizontalAlignment,
+            "vertical_alignment": source.VerticalAlignment,
+        }
+    return formats
+
+
+def write_status_cell(cell, text, status, status_formats, interior_color=None):
+    cell_format = status_formats.get(status) or status_formats["In Progress"]
+    cell.Value = text
+    cell.Interior.Color = interior_color if interior_color is not None else cell_format["interior_color"]
+    cell.Font.Color = cell_format["font_color"]
+    cell.Font.Bold = cell_format["bold"]
+    cell.HorizontalAlignment = cell_format["horizontal_alignment"]
+    cell.VerticalAlignment = cell_format["vertical_alignment"]
+
+
 def write_envs_to_excel(ws, envs):
-    """Solo toca la columna Environment (D): escribe la lista nueva desde
-    FIRST_DATA_ROW y, si la lista anterior era mas larga, limpia el sobrante
-    de D. Deployment Status / Sanity Status / Comments (E, F, G) no se tocan."""
+    """Escribe Environment (D), Deployment Status (E) y Sanity Status (F) de
+    cada env desde FIRST_DATA_ROW, con el formato de la leyenda. Si la lista
+    anterior era mas larga limpia el sobrante de D. Comments (G) no se toca."""
+    status_formats = get_status_formats(ws)
+
     row = FIRST_DATA_ROW
-    for env in envs:
+    for env, status in envs:
         ws.Cells(row, ENV_COL).Value = env
+        write_status_cell(ws.Cells(row, DEPLOY_COL), status, status, status_formats)
+
+        sanity = SANITY_TEXT.get(status, status)
+        sanity_color = PASSED_WM_COLOR if status == "Passed" else None
+        write_status_cell(ws.Cells(row, SANITY_COL), sanity, status, status_formats, sanity_color)
         row += 1
     last_row = row - 1
 
@@ -254,7 +316,7 @@ def main():
 
     if not envs:
         print(
-            f"No encontre ningun mensaje con envs COM en PASSED en las ultimas "
+            f"No encontre ningun mensaje con envs COM en las ultimas "
             f"{LOOKBACK_HOURS}h de {webex.DEFAULT_ROOM!r}."
         )
         sys.exit(1)
@@ -262,8 +324,8 @@ def main():
     header = (message.get("markdown") or message.get("text") or "").splitlines()[0]
     print(f"Mensaje: {header.strip()}")
     print(f"{len(envs)} env(s) encontrados:")
-    for env in envs:
-        print(f"  - {env}")
+    for env, status in envs:
+        print(f"  - {env}: {status}")
 
     excel = get_excel_app()
     excel.Visible = True
@@ -295,7 +357,7 @@ def main():
 
     insert_signature(selection)
 
-    remove_com_block_from_daily_envs(ntt_config.DAILY_ENVS_PATH, envs)
+    remove_com_block_from_daily_envs(ntt_config.DAILY_ENVS_PATH, [env for env, _ in envs])
 
     print("Mail listo con la tabla de COM envs y la firma.")
 

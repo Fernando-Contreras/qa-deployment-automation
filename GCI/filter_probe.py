@@ -80,7 +80,7 @@ async def main():
 
     target = input(
         "\nPaste the TOMS address or any URL on that box "
-        "(e.g. http://192.0.2.2:6300): "
+        "(e.g. http://192.0.2.4:6300): "
     ).strip()
 
     object_url = p.build_object_url(target)

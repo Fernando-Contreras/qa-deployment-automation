@@ -4,6 +4,9 @@ Guarda / actualiza tus credenciales cifradas (una sola vez).
     py Setup_Credentials.py            -> menú con todas
     py Setup_Credentials.py jenkins    -> solo esa
     py Setup_Credentials.py --list     -> ver cuáles ya están guardadas
+    py Setup_Credentials.py --forget-session  -> borra la sesión de Jenkins que
+                                         guarda Track_Deployments (la siguiente
+                                         corrida simplemente vuelve a loguearse)
 
 Nada se escribe en los .py: se cifra con DPAPI de Windows y solo tu
 usuario de Windows en esta máquina puede descifrarlo.
@@ -16,6 +19,7 @@ from nc_credentials import (
     STORE_PATH,
     delete_credentials,
     describe_credentials,
+    forget_session_state,
     list_credentials,
     save_credentials,
 )
@@ -35,7 +39,12 @@ ACCOUNTS = {
 
 def ask_and_save(name: str) -> None:
     print(f"\n🔐 {name} — {ACCOUNTS.get(name, 'cuenta')}")
-    username = input("   Usuario: ").strip()
+    saved_username = {n: u for n, u, _ in describe_credentials()}.get(name)
+    if saved_username:
+        # El usuario casi nunca cambia: Enter lo conserva y solo se pide la contraseña.
+        username = input(f"   Usuario [{saved_username}]: ").strip() or saved_username
+    else:
+        username = input("   Usuario: ").strip()
     if not username:
         print("   ⏭ Saltado (usuario vacío)")
         return
@@ -66,6 +75,11 @@ def main() -> None:
         faltan = [n for n in ACCOUNTS if n not in {r[0] for r in rows}]
         if faltan:
             print(f"\nSin guardar: {', '.join(faltan)}")
+        return
+
+    if "--forget-session" in args:
+        borrada = forget_session_state("jenkins")
+        print("🗑 Sesión de Jenkins borrada." if borrada else "No había sesión guardada.")
         return
 
     if "--delete" in args:

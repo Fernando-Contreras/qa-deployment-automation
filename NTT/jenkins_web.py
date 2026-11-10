@@ -13,10 +13,52 @@ que usan Track_Deployments, MailQAs y Deployment_Defect.
 import asyncio
 import json
 
-from nc_credentials import LoginError
+from nc_credentials import LoginError, load_session_state, save_session_state
 
 # Lo que indica que el formulario de parámetros ya se pintó.
 FORM_READY_SELECTOR = 'div.jenkins-form-item, form[name="parameters"], button[type="submit"]'
+
+# -------------------------
+# SESIÓN COMPARTIDA (sdci + snapci)
+# -------------------------
+# Track_Deployments corre cada 10 min de 3 a 11 pm y mantiene viva la sesión de
+# Jenkins; QA_Envs, COM_Envs y MailQAs la reusan en vez de loguearse cada vez.
+# Va cifrada con DPAPI (ver nc_credentials.save_session_state): una cookie de
+# sesión equivale a una contraseña mientras dure.
+SESSION_NAME = "jenkins"
+
+
+async def new_context_with_session(browser, state):
+    """
+    new_context() cargando la sesión guardada. Si no hay, o no sirve, cae a
+    un contexto limpio — y el login de siempre se hace solo.
+    """
+    if state:
+        try:
+            return await browser.new_context(storage_state=state)
+        except Exception as e:
+            print(f"⚠ La sesión guardada no sirvió ({e}); se hace login normal.")
+    return await browser.new_context()
+
+
+async def persist_session(context, name=SESSION_NAME):
+    """
+    Guarda la sesión ya autenticada para la próxima corrida (o para otro
+    script). Es de cortesía: si algo falla aquí, se sigue sin ella, nunca se
+    rompe la corrida. Regresa el state (para reusarlo) o None.
+    """
+    try:
+        state = await context.storage_state()
+        save_session_state(name, state)
+        return state
+    except Exception as e:
+        print(f"⚠ No pude guardar la sesión para la próxima corrida: {e}")
+        return None
+
+
+def saved_session(name=SESSION_NAME):
+    """La sesión guardada (o None). Atajo para quien arma su propio contexto."""
+    return load_session_state(name)
 
 
 async def fetch_json_from_browser(page, url):
@@ -72,6 +114,23 @@ class JenkinsForm:
         except Exception:
             await page.wait_for_load_state("networkidle", timeout=180000)
             await page.wait_for_selector(FORM_READY_SELECTOR, timeout=180000)
+
+    async def login_if_needed(self, page):
+        """
+        Como do_login, pero sin su espera de hasta 60 s cuando ya hay sesión.
+
+        do_login espera a que APAREZCA el formulario de login; con una sesión
+        guardada no aparece nunca, y esa espera costaría más que el login que
+        se quiere evitar. Aquí se revisa directo: la página ya cargó su DOM
+        (los callers hicieron goto con domcontentloaded), así que si no hay
+        formulario, ya estás dentro. Regresa True si tuvo que loguearse.
+        """
+        if await page.locator('input[name="j_username"]').count() == 0:
+            print("ℹ️ Ya hay sesión (no apareció el login).")
+            return False
+
+        await self.do_login(page)
+        return True
 
     async def do_login(self, page):
         try:

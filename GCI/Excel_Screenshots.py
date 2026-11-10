@@ -13,24 +13,27 @@ ticket, this:
      Equipment, Equipment and Delivery&Return and DSG.AM.Configuration
      loaders. Already-open workbooks are reused, not reopened;
   3. per product, per workbook, per sheet: finds the rows that belong to
-     that product, selects them, and walks right across the sheet taking
-     one screenshot per screenful — stopping as soon as there is nothing
-     new to the right (no more values and no more coloured cells). A
-     sheet where the product isn't mentioned gets no screenshot at all;
+     that product, selects them, folds away the columns those rows leave
+     empty, and photographs what's left. Every shot therefore carries a
+     screenful of real values, blank stretches are never photographed,
+     and a sheet where the product isn't mentioned gets no screenshot at
+     all;
   4. appends it all to the END of Downloads\\<TICKET>.docx — the SAME
      file AM and PIM write, so running this after them just adds to the
      report instead of starting a new one;
   5. asks whether the reports look right, and on a yes attaches each one
      to its ticket, posts the Tested And Passed comment (with the report
-     tagged as [^<TICKET>.docx]) and moves the ticket one step on: Open
-     to In Progress, In Progress to Passed. On a no, nothing is sent.
+     tagged as [^<TICKET>.docx]) and moves the ticket to Passed — from
+     Open it goes through In Progress first. On a no, nothing is sent.
 
 The horizontal walk relies on the loaders' frozen panes: the identity
 columns stay on screen while the rest scrolls, which is exactly how the
 shots are taken by hand. If a sheet has no frozen panes, one is made for
 the run and undone afterwards.
 
-Nothing is ever written to the .xlsx files — only the view is moved.
+Nothing is ever written to the .xlsx files — only the view is moved, and
+the folded-away columns (and a freeze that had to be made) are put back
+as they were, including when a run fails part way.
 Nothing is sent to Jira until the question at the end is answered yes.
 """
 
@@ -87,9 +90,18 @@ MAX_MATCH_ROWS = 400
 # Hard ceiling per sheet, so one runaway product can't fill a report.
 MAX_SHOTS_PER_SHEET = 60
 
-# Repeat one column/row between consecutive shots so nothing falls in the
-# crack between two screenshots.
-OVERLAP_COLS = 1
+# Columns these rows leave empty are folded away before shooting, so the
+# values close up and one picture carries as many of them as fit instead
+# of one picture per handful. Only the view changes, and only while the
+# group is being shot. Set to False to shoot the sheet as it lies.
+HIDE_EMPTY_COLUMNS = True
+
+# How many columns to hide per call to Excel.
+HIDE_CHUNK = 25
+
+# Repeat one row between consecutive shots so nothing falls in the crack
+# between two screenshots. (Columns don't need this: each shot starts on
+# a column that still has something to show.)
 OVERLAP_ROWS = 1
 
 # Rows shown above the match, so it isn't stuck to the column headers.
@@ -164,11 +176,16 @@ PERCENT_PASSED = 100
 PERCENT_EXECUTED = 100
 TIME_SPENT = "1h"
 
-# One step forward, from wherever the ticket is now.
-NEXT_STATUS = {
-    "open": ("in progress",),
-    "in progress": ("passed", "pass"),
-}
+# Where every ticket should end up, and the only two places it is moved
+# from. An Open ticket has to go through In Progress to get there; a
+# ticket sitting anywhere else (Failed, Blocked, Cancelled...) is a
+# decision somebody already made and is left alone.
+GOAL_STATUS = "Passed"
+MOVABLE_FROM = ("open", "in progress")
+
+# A ticket needs at most Open -> In Progress -> Passed; the cap only
+# stops a workflow that behaves unexpectedly from looping.
+MAX_TRANSITIONS = 3
 
 # Excel reports "busy right now" (a cell in edit mode, a dialog up) by
 # refusing the COM call outright; that's worth a retry, unlike a real
@@ -177,34 +194,76 @@ EXCEL_BUSY_ATTEMPTS = 6
 EXCEL_BUSY_DELAY = 3
 
 
-# Window rectangles come back in physical pixels only when the process is
-# DPI-aware — without this the crop is wrong on a scaled display. Safe
-# here because this script never uses PIM's fixed-coordinate clicking.
-try:
-    ctypes.windll.shcore.SetProcessDpiAwareness(2)
-except Exception:
+def _make_dpi_aware():
+    """Window rectangles only come back in physical pixels when the
+    process is DPI-aware — without this the crop is wrong on a scaled
+    display.
+
+    Deliberately NOT done at import time: when PIM_Validation hands its
+    finished tickets over, this module gets imported into the middle of
+    a run that steers TOMS with fixed-coordinate pyautogui clicks, and
+    changing the process's DPI awareness under it would move them. By
+    the time the Excel pass starts, that clicking is over."""
+
     try:
-        ctypes.windll.user32.SetProcessDPIAware()
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)
     except Exception:
-        pass
+        try:
+            ctypes.windll.user32.SetProcessDPIAware()
+        except Exception:
+            pass
 
 
 # -------------------------
 # INPUT
 # -------------------------
 
-def extract_products(description):
-    """The products listed in the ticket.
+# Lines that turn up right under a product list when Jira swallows the
+# blank line after it, and are instructions rather than products.
+PROSE_START_RE = re.compile(
+    r"^(validate|refer|note|also|please|check|verify|ensure|compare)\b",
+    re.I
+)
 
-    PIM's reader, then the same filter AM uses, so a trailing "Validate
-    SKU, Colour, ..." line never gets searched as if it were a device."""
+
+def _is_not_a_product(line):
+    """True for a line the list reader picked up that is obviously prose:
+    an instruction, a step number, a heading ending in a colon, or a
+    mention of a file."""
+
+    if pim.is_offering_url(line):
+        return False
+
+    if PROSE_START_RE.match(line):
+        return True
+
+    if pim.NUMBERED_STEP_RE.match(line) or line.endswith(":"):
+        return True
+
+    if "://" in line:
+        return True
+
+    lowered = line.lower()
+
+    return ".xlsx" in lowered or ".xlsm" in lowered
+
+
+def extract_products(description):
+    """The products listed in the ticket — the same list PIM works from.
+
+    PIM's own reader decides where the list starts and stops, so what it
+    finds here is exactly what it found there. This used to push the list
+    through AM's name-shape test as well (a capacity like "256GB" or a
+    short prefix like "CPO"), which silently dropped real products that
+    don't look like a phone: "FRANKLIN WIRELESS MIFI RG2100 5G" has
+    neither, and the pass came back asking for it by hand.
+
+    All that's removed is lines that are plainly instructions, for the
+    case where Jira drops the blank line that normally ends the list."""
 
     found = pim.extract_offerings_from_description(description)
 
-    return [
-        d for d in found
-        if pim.is_offering_url(d) or pim._looks_like_offering(d)
-    ]
+    return [d for d in found if d and not _is_not_a_product(d)]
 
 
 def resume_skip_count(existing_text, products):
@@ -227,25 +286,75 @@ def resume_skip_count(existing_text, products):
     return skip
 
 
+# What SVN calls a loader it hands you from the repository: opening one
+# from the repo browser saves it as
+# "<loader>.xlsx-revHEAD.svn001.tmp.xlsx". That IS the loader — HEAD is
+# the latest revision, which is what the ticket says to validate against
+# — so it's accepted, and treated as the same loader as a plainly named
+# copy.
+SVN_COPY_RE = re.compile(
+    r"(\.xls[xm])-rev[^.]*\.svn\d+\.tmp\.xls[xm]$", re.I
+)
+
+
+def loader_identity(name):
+    """The loader's own file name, with SVN's "-revHEAD.svn001.tmp"
+    wrapping taken off — so every copy of the same loader maps to the
+    same name."""
+
+    return SVN_COPY_RE.sub(r"\1", name)
+
+
 def find_loader_files():
-    """Every loader sitting in Downloads, newest last. Excel's own lock
-    files (~$...) are skipped."""
+    """The loaders sitting in Downloads: one file per loader.
+
+    Excel's lock files (~$...) are not loaders and are skipped. When
+    several copies of the same loader are there (a plain download and an
+    SVN one, or two SVN copies), the most recently saved wins — and that
+    choice is printed, so it's never a mystery which file was used."""
 
     pattern = os.path.join(pim.DOWNLOADS, LOADER_GLOB)
 
-    files = [
-        path for path in glob.glob(pattern)
-        if not os.path.basename(path).startswith("~$")
-    ]
+    newest = {}
+    others = {}
 
-    return sorted(files)
+    for path in glob.glob(pattern):
+
+        name = os.path.basename(path)
+
+        if name.startswith("~$"):
+            continue
+
+        key = loader_identity(name).lower()
+
+        try:
+            stamp = os.path.getmtime(path)
+        except OSError:
+            continue
+
+        if key not in newest or stamp > newest[key][0]:
+            if key in newest:
+                others.setdefault(key, []).append(newest[key][1])
+            newest[key] = (stamp, path)
+        else:
+            others.setdefault(key, []).append(path)
+
+    for key, skipped in others.items():
+        for path in skipped:
+            print(
+                f"   ⏭ {os.path.basename(path)} — an older copy of the "
+                f"same loader; using {os.path.basename(newest[key][1])}."
+            )
+
+    return sorted(path for _stamp, path in newest.values())
 
 
 def loader_label(path):
     """Short name for the report heading: the middle of the file name,
-    without the "NC.GCI.Polaris." prefix and the extension."""
+    without the "NC.GCI.Polaris." prefix, the extension, or SVN's
+    revision wrapping."""
 
-    name = os.path.splitext(os.path.basename(path))[0]
+    name = os.path.splitext(loader_identity(os.path.basename(path)))[0]
 
     return re.sub(r"^NC\.GCI\.Polaris\.", "", name)
 
@@ -725,6 +834,147 @@ def row_groups(rows):
     return groups
 
 
+def _col_letter(index):
+
+    letters = ""
+
+    while index:
+        index, rest = divmod(index - 1, 26)
+        letters = chr(65 + rest) + letters
+
+    return letters
+
+
+def row_value_columns(ws, first_row, last_row, last_col):
+    """Which columns actually hold something for these rows.
+
+    One bulk read of the block rather than a question per column, and
+    bounded by last_col so it never reaches into the empty right-hand
+    side of the sheet."""
+
+    if last_col < 2:
+        return [1]
+
+    try:
+        block = ws.Range(
+            ws.Cells(first_row, 1),
+            ws.Cells(last_row, last_col)
+        ).Value
+    except Exception:
+        # Couldn't read it — treat every column as worth showing rather
+        # than quietly leaving data out of the report.
+        return list(range(1, last_col + 1))
+
+    filled = set()
+
+    for row_values in block or ():
+        for index, value in enumerate(row_values, start=1):
+            if value is None:
+                continue
+            if str(value).strip() == "":
+                continue
+            filled.add(index)
+
+    return sorted(filled)
+
+
+def _hidden_state(ws, first_col, last_col):
+    """True / False if every column in the span agrees, None if mixed."""
+
+    try:
+        state = ws.Range(
+            ws.Cells(1, first_col), ws.Cells(1, last_col)
+        ).EntireColumn.Hidden
+    except Exception:
+        return None
+
+    return None if state is None else bool(state)
+
+
+def _set_hidden(ws, columns, hidden):
+    """Hide or show these columns, a handful of areas per call instead of
+    one call per column."""
+
+    chunk = []
+
+    for col in columns:
+
+        letter = _col_letter(col)
+        chunk.append(f"{letter}:{letter}")
+
+        if len(chunk) == HIDE_CHUNK:
+            ws.Range(",".join(chunk)).EntireColumn.Hidden = hidden
+            chunk = []
+
+    if chunk:
+        ws.Range(",".join(chunk)).EntireColumn.Hidden = hidden
+
+
+def hide_empty_columns(ws, keep, first_col, last_col):
+    """Hide the columns these rows leave empty, so what IS filled closes
+    up and fits in far fewer screenshots.
+
+    This is what the by-hand screenshots do: nobody photographs twenty
+    blank columns to reach the next value. Only the scrolling side is
+    touched — the frozen identity columns stay — and only columns that
+    were visible to begin with, so a column the sheet already had hidden
+    is left hidden and is NOT reopened afterwards.
+
+    Returns the columns it hid, to give back when the group is done."""
+
+    if not HIDE_EMPTY_COLUMNS or last_col <= first_col:
+        return []
+
+    wanted = set(keep)
+
+    empty = [c for c in range(first_col, last_col + 1) if c not in wanted]
+
+    if not empty:
+        return []
+
+    # Normally nothing in the span is hidden yet, and then one question
+    # answers it for the whole span instead of one per column.
+    state = _hidden_state(ws, first_col, last_col)
+
+    if state is None:
+        empty = [c for c in empty if not _is_hidden(ws, c)]
+    elif state is True:
+        return []
+
+    if not empty:
+        return []
+
+    try:
+        _set_hidden(ws, empty, True)
+    except Exception as e:
+        print(f"   ⚠ Couldn't fold away the empty columns ({e}) — "
+              "screenshotting the sheet as it is.")
+        return []
+
+    return empty
+
+
+def _is_hidden(ws, col):
+
+    try:
+        return bool(ws.Columns(col).Hidden)
+    except Exception:
+        return False
+
+
+def restore_columns(ws, columns):
+    """Put back exactly what hide_empty_columns took away."""
+
+    if not columns:
+        return
+
+    try:
+        _set_hidden(ws, columns, False)
+    except Exception as e:
+        print(f"   ⚠ Couldn't unhide the columns again ({e}) — the file "
+              "isn't saved, so closing it without saving puts them back.")
+
+
 def data_extent(ws, first_row, last_row):
     """The last column worth screenshotting for these rows.
 
@@ -873,19 +1123,18 @@ def _visible_last_row(pane):
     return int(visible.Row) + int(visible.Rows.Count) - 1
 
 
-def _next_visible_col(ws, col):
-    """Skip columns the sheet itself has hidden — scrolling to one of
-    those just lands on the next visible one anyway."""
+def frozen_through(pane):
+    """The last column of the frozen block — the identity columns that
+    show in every screenshot no matter where the sheet is scrolled.
 
-    for _ in range(200):
-        try:
-            if not ws.Columns(col).Hidden:
-                return col
-        except Exception:
-            return col
-        col += 1
+    Found by asking for column 1: Excel clamps that to the freeze
+    point."""
 
-    return col
+    try:
+        pane.ScrollColumn = 1
+        return int(pane.ScrollColumn) - 1
+    except Exception:
+        return 0
 
 
 def _same_png(path_a, path_b):
@@ -923,41 +1172,47 @@ def _grab_settled(hwnd, top_offset, previous):
     return _grab_excel_window(hwnd, top_offset)
 
 
-def horizontal_shots(xl, ws, pane, hwnd, last_col, top_offset, previous=None):
-    """Walk right across the selected rows, one screenshot per screenful,
-    and stop as soon as the last column with anything on it is in view.
+def horizontal_shots(xl, ws, pane, hwnd, value_cols, frozen_last,
+                     top_offset, previous=None):
+    """Walk right across the selected rows, taking a picture only where
+    those rows hold something.
 
-    Two extra brakes: an identical shot (the scroll didn't move) and a
-    blank one both end the walk instead of being filed."""
+    Every shot starts on a column that still has a value to show, and
+    then carries whatever else fits beside it — with the empty columns
+    folded away, that's a screenful of real values at a time. Columns
+    already caught by the previous shot are not shot again, and a stretch
+    with nothing in it is never photographed: the walk jumps straight
+    over it to the next column that has something.
+
+    Two brakes: a blank picture, and a scroll that didn't move."""
 
     shots = []
 
-    try:
-        pane.ScrollColumn = 1
-        col = int(pane.ScrollColumn)
-    except Exception:
-        col = 1
+    # The frozen columns ride along in every picture, so only what sits
+    # to the right of them has to be reached.
+    pending = [c for c in value_cols if c > frozen_last]
 
-    landed = None
+    if not pending:
+        # Everything these rows hold is inside the always-visible block:
+        # one picture is the lot.
+        pending = [frozen_last + 1]
+
+    shown_through = frozen_last
 
     for _ in range(MAX_PASSES):
 
+        remaining = [c for c in pending if c > shown_through]
+
+        if not remaining and shots:
+            break
+
+        target = remaining[0] if remaining else frozen_last + 1
+
         try:
-            pane.ScrollColumn = col
-            # Where it actually ended up: Excel clamps a scroll it can't
-            # do, and a shot from the same place as the last one would
-            # just be the same picture again. Asking Excel beats
-            # comparing pixels — two screenfuls of the same coloured
-            # rows look near-identical even when they're different
-            # columns.
-            now = int(pane.ScrollColumn)
+            pane.ScrollColumn = target
+            landed = int(pane.ScrollColumn)
         except Exception:
             break
-
-        if landed is not None and now == landed:
-            break
-
-        landed = now
 
         _settle(xl)
 
@@ -977,26 +1232,47 @@ def horizontal_shots(xl, ws, pane, hwnd, last_col, top_offset, previous=None):
         except Exception:
             break
 
-        if visible_last >= last_col:
+        # No forward progress (Excel clamped the scroll, or the column is
+        # wider than the window) — another shot would be the same shot.
+        if visible_last <= shown_through:
             break
 
-        nxt = _next_visible_col(
-            ws,
-            max(col + 1, visible_last - OVERLAP_COLS)
-        )
-
-        if nxt <= col:
-            break
-
-        col = nxt
+        shown_through = max(visible_last, landed)
 
     return shots
 
 
-def capture_group(xl, ws, win, pane, hwnd, rows, last_col, top_offset):
-    """Screenshots for one clump of rows: select them, put them at the
-    top of the pane, then walk right. A clump taller than the window is
-    done in screenfuls."""
+def capture_group(xl, ws, win, pane, hwnd, rows, last_col, value_cols,
+                  top_offset):
+    """Screenshots for one clump of rows: fold away the columns they
+    leave empty, select them, put them at the top of the pane, then walk
+    right across what's left. A clump taller than the window is done in
+    screenfuls.
+
+    Whatever was folded away is given back before returning, however the
+    walk ends."""
+
+    frozen_last = frozen_through(pane)
+
+    hidden = hide_empty_columns(ws, value_cols, frozen_last + 1, last_col)
+
+    if hidden:
+        print(f"      (folded away {len(hidden)} empty column(s))")
+
+    try:
+        shots = _capture_group_rows(
+            xl, ws, pane, hwnd, rows, last_col, value_cols, frozen_last,
+            top_offset
+        )
+    finally:
+        restore_columns(ws, hidden)
+
+    return shots
+
+
+def _capture_group_rows(xl, ws, pane, hwnd, rows, last_col, value_cols,
+                        frozen_last, top_offset):
+    """The walk itself, with the empty columns already folded away."""
 
     shots = []
 
@@ -1033,7 +1309,7 @@ def capture_group(xl, ws, win, pane, hwnd, rows, last_col, top_offset):
 
         shots.extend(
             horizontal_shots(
-                xl, ws, pane, hwnd, last_col, top_offset,
+                xl, ws, pane, hwnd, value_cols, frozen_last, top_offset,
                 shots[-1] if shots else None
             )
         )
@@ -1156,9 +1432,14 @@ def process_sheet(xl, hwnd, wb, ws, product):
                 break
 
             last_col = data_extent(ws, group[0], group[-1])
+            value_cols = row_value_columns(
+                ws, group[0], group[-1], last_col
+            )
+
             shots.extend(
                 capture_group(
-                    xl, ws, win, pane, hwnd, group, last_col, top_offset
+                    xl, ws, win, pane, hwnd, group, last_col, value_cols,
+                    top_offset
                 )
             )
 
@@ -1350,6 +1631,8 @@ def process_ticket(xl, hwnd, workbooks, writer, job, server_details):
 
 def run_excel(jobs, server_details):
     """The whole Excel half: open the loaders once, then every ticket."""
+
+    _make_dpi_aware()
 
     files = find_loader_files()
 
@@ -1602,24 +1885,47 @@ async def jira_comment(page, ticket, body):
     print("   💬 Comment added")
 
 
-def _pick_transition(transitions, state):
-    """The one step forward from where the ticket is now: Open goes to In
-    Progress, In Progress goes to Passed. Anywhere else is left alone."""
-
-    targets = NEXT_STATUS.get(state.strip().lower())
-
-    if not targets:
-        return None, None
+def _find_transition(transitions, targets):
+    """The transition that lands on one of these statuses (or is named
+    like one). Matched whole: "Passed" must not pick "Passed With Minor
+    Defects"."""
 
     for transition in transitions:
 
-        to_name = ((transition.get("to") or {}).get("name") or "").lower()
-        own_name = (transition.get("name") or "").lower()
+        to_name = ((transition.get("to") or {}).get("name") or "").strip().lower()
+        own_name = (transition.get("name") or "").strip().lower()
 
         if to_name in targets or own_name in targets:
-            return transition, (transition.get("to") or {}).get("name")
+            return transition
 
-    return None, targets[0]
+    return None
+
+
+def _pick_transition(transitions, state):
+    """The next move toward Passed from where the ticket is now.
+
+    Straight to Passed whenever the workflow offers it from here; failing
+    that, an Open ticket goes to In Progress first. Returns (transition,
+    wanted): wanted is None when the ticket isn't somewhere it gets
+    moved from, and otherwise names the status that was being aimed at,
+    for the message when no way there exists."""
+
+    if state.strip().lower() not in MOVABLE_FROM:
+        return None, None
+
+    goal = _find_transition(transitions, ("passed", "pass"))
+
+    if goal is not None:
+        return goal, GOAL_STATUS
+
+    if state.strip().lower() == "open":
+
+        start = _find_transition(transitions, ("in progress",))
+
+        if start is not None:
+            return start, GOAL_STATUS
+
+    return None, GOAL_STATUS
 
 
 def _transition_payload(transition):
@@ -1685,65 +1991,113 @@ def _transition_payload(transition):
 
 
 async def jira_transition(page, ticket, state):
+    """Walk the ticket to Passed: straight there from In Progress, through
+    In Progress first from Open. The transitions are asked for again after
+    every move, because what's on offer (and what the Pass screen wants
+    filled in) depends on where the ticket is by then."""
 
-    status, data, text = await jira_request(
-        page,
-        "GET",
-        f"/rest/api/2/issue/{ticket}/transitions?expand=transitions.fields",
+    for _ in range(MAX_TRANSITIONS):
+
+        status, data, text = await jira_request(
+            page,
+            "GET",
+            f"/rest/api/2/issue/{ticket}/transitions"
+            "?expand=transitions.fields",
+        )
+
+        if status != 200 or not data:
+            raise RuntimeError(
+                f"couldn't read transitions: {_jira_error(text)}"
+            )
+
+        transitions = data.get("transitions") or []
+
+        transition, wanted = _pick_transition(transitions, state)
+
+        if transition is None:
+
+            if wanted is None:
+                print(f"   ⏭ Status is \"{state}\" — not one that gets "
+                      "moved, left as it is.")
+            else:
+                available = ", ".join(
+                    t.get("name", "?") for t in transitions
+                ) or "none"
+                print(f"   ⚠ Stuck at \"{state}\": no way on to "
+                      f"\"{wanted}\" from here. Available: {available}.")
+
+            return
+
+        fields, update, unfilled = _transition_payload(transition)
+
+        if unfilled:
+            print(f"   ⚠ \"{transition.get('name')}\" also needs "
+                  f"{', '.join(unfilled)} — left at \"{state}\" so nothing "
+                  "gets filled in with a guess. Finish it by hand.")
+            return
+
+        payload = {"transition": {"id": transition["id"]}}
+
+        if fields:
+            payload["fields"] = fields
+        if update:
+            payload["update"] = update
+
+        status, _data, text = await jira_request(
+            page,
+            "POST",
+            f"/rest/api/2/issue/{ticket}/transitions",
+            payload=payload,
+        )
+
+        if status not in (200, 204):
+            raise RuntimeError(
+                f"couldn't move it on from \"{state}\" "
+                f"({transition.get('name')}): {_jira_error(text)}"
+            )
+
+        to_name = (
+            (transition.get("to") or {}).get("name")
+            or transition.get("name")
+        )
+
+        print(f"   ➡ {state} → {to_name}")
+
+        state = to_name
+
+        if state.strip().lower() == GOAL_STATUS.lower():
+            return
+
+    print(f"   ⚠ Still at \"{state}\" after {MAX_TRANSITIONS} moves — "
+          "stopping so it can't loop. Finish it by hand.")
+
+
+async def ensure_on_jira(page):
+    """Put the page on Jira if it isn't already.
+
+    The REST calls run as fetches from whatever page this is, which is
+    the whole point — a same-origin fetch is what gets past the XSRF
+    check. On a fresh tab (about:blank) that same fetch is cross-origin
+    and dies with "Failed to fetch", so a page handed over by
+    PIM/AM has to be sent to Jira first."""
+
+    try:
+        if page.url.startswith(JIRA_BASE):
+            return
+    except Exception:
+        pass
+
+    await page.goto(
+        JIRA_BASE + "/", wait_until="domcontentloaded", timeout=60000
     )
 
-    if status != 200 or not data:
-        raise RuntimeError(f"couldn't read transitions: {_jira_error(text)}")
-
-    transitions = data.get("transitions") or []
-
-    transition, wanted = _pick_transition(transitions, state)
-
-    if transition is None:
-
-        if wanted is None:
-            print(f"   ⏭ Status is \"{state}\" — nothing to move it to, "
-                  "left as it is.")
-        else:
-            available = ", ".join(
-                t.get("name", "?") for t in transitions
-            ) or "none"
-            print(f"   ⚠ No transition to \"{wanted}\" from \"{state}\". "
-                  f"Available: {available}. Left as it is.")
-
-        return
-
-    fields, update, unfilled = _transition_payload(transition)
-
-    if unfilled:
-        print(f"   ⚠ \"{transition.get('name')}\" also needs "
-              f"{', '.join(unfilled)} — move this one by hand so nothing "
-              "gets filled in with a guess.")
-        return
-
-    payload = {"transition": {"id": transition["id"]}}
-
-    if fields:
-        payload["fields"] = fields
-    if update:
-        payload["update"] = update
-
-    status, _data, text = await jira_request(
-        page,
-        "POST",
-        f"/rest/api/2/issue/{ticket}/transitions",
-        payload=payload,
-    )
-
-    if status not in (200, 204):
-        raise RuntimeError(f"transition refused: {_jira_error(text)}")
-
-    to_name = (transition.get("to") or {}).get("name") or transition.get("name")
-    print(f"   ➡ {state} → {to_name}")
+    await pim.login_tms_if_needed(page)
 
 
 async def update_jira(page, reports, server_details):
-    """Attach the report, comment, and move the ticket one step on."""
+    """Attach the report, comment, and move the ticket to Passed."""
+
+    await ensure_on_jira(page)
 
     status, me, text = await jira_request(page, "GET", "/rest/api/2/myself")
 
@@ -1865,6 +2219,80 @@ async def read_ticket(page, ticket):
 
 
 # -------------------------
+# THE RUN
+# -------------------------
+
+async def continue_from_validation(context, raw_text, jobs):
+    """Everything after the tickets are known: the loader screenshots,
+    the question, and the Jira updates.
+
+    This is what PIM_Validation and AM_Validation call when they're done.
+    They already asked for the Server Details and already read each
+    ticket's product list, so both are handed over rather than asked for
+    a second time — `jobs` is a list of (ticket, title, products) and
+    `raw_text` is the block that was pasted at the start.
+
+    Reports go to the same Downloads\\<TICKET>.docx those two just
+    wrote, so the loader screenshots land at the end of the report they
+    already built."""
+
+    server_details = pim.extract_server_details(raw_text)
+
+    jobs = [job for job in jobs if job and job[2]]
+
+    if not jobs:
+        print("\n⏭ No products to look up in the loaders.")
+        return []
+
+    print(
+        "\n================\n"
+        "📊 Loader screenshots — same tickets, same Server Details, "
+        "nothing to paste again."
+    )
+
+    reports = run_excel(jobs, server_details)
+
+    if not reports:
+        print("\n⏭ No loader report was written, so there's nothing to "
+              "put on the tickets.")
+        return reports
+
+    print(
+        """
+🎉 Screenshots done.
+
+Excel and Word are left open — the loaders are where they were and
+every report is there to look through."""
+    )
+
+    for _ticket, word_path in reports:
+        print(f"  📄 {word_path}")
+
+    print()
+
+    if ask_yes_no(
+        "All good? Answering yes attaches each report to its ticket, "
+        "adds the Tested And Passed comment, and moves the ticket to "
+        "Passed."
+    ):
+        page = await context.new_page()
+
+        try:
+            await update_jira(page, reports, server_details)
+        finally:
+            try:
+                await page.close()
+            except Exception:
+                pass
+
+    else:
+        print("\n👍 Nothing sent to Jira. The reports are still in "
+              "Downloads.")
+
+    return reports
+
+
+# -------------------------
 # MAIN
 # -------------------------
 
@@ -1875,7 +2303,6 @@ async def main():
     raw_text = pim.read_multiline()
 
     tickets = pim.extract_tickets(raw_text)
-    server_details = pim.extract_server_details(raw_text)
 
     print("\n================")
     print("Tickets:")
@@ -1897,39 +2324,10 @@ async def main():
         for ticket in tickets:
             jobs.append(await read_ticket(page, ticket))
 
-        jobs = [job for job in jobs if job[2]]
-
-        if not jobs:
-            print("❌ No products to look for.")
-            await browser.close()
-            return
-
-        # The browser stays open through the Excel run: the same logged-in
-        # session is what attaches and comments at the end.
-        reports = run_excel(jobs, server_details)
-
-        print(
-            """
-🎉 Screenshots done.
-
-Excel and Word are left open — the loaders are where they were and
-every report is there to look through."""
-        )
-
-        for ticket, word_path in reports:
-            print(f"  📄 {word_path}")
-
-        print()
-
-        if reports and ask_yes_no(
-            "All good? Answering yes attaches each report to its ticket, "
-            "adds the Tested And Passed comment, and moves the ticket one "
-            "step on."
-        ):
-            await update_jira(page, reports, server_details)
-        else:
-            print("\n👍 Nothing sent to Jira. The reports are still in "
-                  "Downloads.")
+        # Same tail PIM and AM run — the browser stays open through the
+        # Excel pass, because its logged-in session is what attaches and
+        # comments at the end.
+        await continue_from_validation(context, raw_text, jobs)
 
         try:
             await browser.close()

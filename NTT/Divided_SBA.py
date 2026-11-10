@@ -3,7 +3,7 @@ Divided_SBA: split-file SBA runs.
 
 Pick a folder under Documents\\NTT\\SBA (ntt_config.SBA_ROOT) and this script opens
 one browser tab per file inside it, fills the same parameters on
-http://192.0.2.3:9312/ (environment / tenant / execution), attaches the file to
+http://192.0.2.6:9312/ (environment / tenant / execution), attaches the file to
 the upload area and hits Execute. Every file in the folder is executed, one tab
 each, and the tabs are left open so you can watch them.
 
@@ -29,7 +29,7 @@ from playwright.async_api import Locator, Page, async_playwright
 
 import ntt_config
 
-APP_URL = "http://192.0.2.3:9312/"
+APP_URL = "http://192.0.2.6:9312/"
 SBA_ROOT = ntt_config.SBA_ROOT
 LOG_DIR = Path(__file__).with_name("Divided_SBA_logs")
 

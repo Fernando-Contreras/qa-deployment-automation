@@ -438,16 +438,22 @@ def update_daily_envs(text: str, mode: str):
     else:
         DAILY_ENVS_PATH.write_text(clean_text, encoding="utf-8")
 
-def build_blocks(mail_texts):
+def build_blocks_with_plan(mail_texts):
     """Un bloque por mail abierto. Cada mail se procesa por separado para que
-    sus versiones y envs no se mezclen con los de los otros mails."""
+    sus versiones y envs no se mezclen con los de los otros mails.
+
+    Devuelve (texto, plan). El plan dice que envs arrancan IN PROGRESS cuando
+    se termine de mandar a Webex (ver plan_start_envs)."""
     blocks = []
+    plan = []
 
     for source, text in mail_texts:
         output = build_webex_box(text)
         if output.startswith("No environments detected"):
             print(f"   (sin envs detectados, se omite: {source})")
             continue
+
+        plan.extend(plan_start_envs(text, output))
 
         out_lines = output.splitlines()
         # build_webex_box devuelve "**title**" y luego "---";
@@ -460,9 +466,156 @@ def build_blocks(mail_texts):
         blocks.append("\n".join([f"## {title}", *body]))
 
     if not blocks:
-        return "No environments detected in any open mail."
+        return "No environments detected in any open mail.", []
 
-    return "\n".join(["\n\n---\n\n".join(blocks)])
+    return "\n".join(["\n\n---\n\n".join(blocks)]), plan
+
+def build_blocks(mail_texts):
+    return build_blocks_with_plan(mail_texts)[0]
+
+# ---------------------------------------------------------------------------
+# Quien arranca primero
+# ---------------------------------------------------------------------------
+# Los mails piden "primero este env y, si sube bien, entonces los de abajo":
+#
+#   1. Nttcw67_qa ... Latest 99 ADM CI SD
+#   Note: If above Env will upgrade successfully, then only upgrade the below Envs
+#   2. Nttcw42_qa ... SD
+#
+# El de arriba arranca (IN PROGRESS) y los de abajo esperan (ON HOLD). Si el
+# mail no trae esa nota (los COM, por ejemplo) no hay "primero": todos arrancan.
+# Esto se decide aqui porque solo List_Envs ve el mail; Daily_Envs.txt ya no
+# guarda cual era el primero.
+GATE_RE = re.compile(
+    r"\b(?:if|once|when|after)\b[^.\n]{0,40}\babove\b[^.\n]{0,60}"
+    r"\b(?:upgrad|updat|install|deploy|success)"
+    r"|\bonly\s+(?:upgrade|update|deploy|install|proceed)\b[^.\n]{0,40}\bbelow\b",
+    re.I,
+)
+ENV_MENTION_RE = re.compile(r"(?:nttcw|nttcom|com)?\s*(\d{1,3})\s*[_-]?\s*qa\b", re.I)
+URL_RE = re.compile(r"https?://\S+")
+
+# Una linea de env ya armada: [**43QA**](url) (T2.3.55)
+ENV_LINE_RE = re.compile(r"\[(?:\*\*)?((?:COM)?\d+QA)(?:\*\*)?\]\([^)]*\)\s*\(([^)]*)\)")
+STATUS_HEADER_RE = re.compile(
+    r"^\s*(?:\S+\s+)?\*\*(PASSED|IN PROGRESS|ON HOLD|BLOCKED|FAILED)\*\*", re.I
+)
+TITLE_LINE_RE = re.compile(
+    r"^\s*(?:#{1,6}\s*)?\*\*(?!(?:PASSED|IN PROGRESS|ON HOLD|BLOCKED|FAILED)\*\*)(.+?)\*\*\s*$",
+    re.I,
+)
+IN_PROGRESS_HEADER = "\U0001F504 **IN PROGRESS**:"
+
+def block_key(title: str) -> str:
+    """'## **T2.3.55 — 46CI**' y '**T2.3.55 — 46CI**' son el mismo bloque."""
+    return " ".join(re.sub(r"[#*]+", " ", title).split())
+
+def env_number(label: str) -> int:
+    return int(re.search(r"\d+", label).group())
+
+def find_first_envs(raw_text: str, produced):
+    """Numeros de env que el mail manda ANTES de la nota de "si el de arriba
+    sube bien...". None si no hay nota (o no separa nada): todos arrancan.
+
+    Solo cuentan los envs que build_webex_box si dejo en el bloque (`produced`),
+    asi un "46_qa" suelto en el nombre del CI o en una URL no se cuela."""
+    first = set()
+    gate_seen = False
+
+    for line in raw_text.splitlines():
+        if GATE_RE.search(line):
+            gate_seen = True
+            break
+
+        for match in ENV_MENTION_RE.finditer(URL_RE.sub(" ", line)):
+            number = int(match.group(1))
+            if number in produced:
+                first.add(number)
+
+    if not gate_seen or not first or first >= produced:
+        return None
+
+    return first
+
+def plan_start_envs(raw_text: str, output: str):
+    """Lista de (bloque, env, version) que deben quedar IN PROGRESS.
+    `output` es lo que devolvio build_webex_box para este mismo mail."""
+    lines = output.splitlines()
+    if not lines:
+        return []
+
+    title = block_key(lines[0])
+    env_lines = []
+    for line in lines[1:]:
+        match = ENV_LINE_RE.search(line)
+        if match:
+            env_lines.append((match.group(1).upper(), match.group(2).strip()))
+
+    produced = {env_number(label) for label, _ in env_lines}
+    first = find_first_envs(raw_text, produced)
+
+    return [
+        (title, label, version)
+        for label, version in env_lines
+        if first is None or env_number(label) in first
+    ]
+
+def promote_envs_to_in_progress(path, plan) -> int:
+    """Mueve de ON HOLD a IN PROGRESS las lineas del plan en Daily_Envs.txt.
+
+    Solo agrega una seccion IN PROGRESS arriba del ON HOLD de cada bloque;
+    el orden y el formato final los deja OrganizeResults, que junta las
+    secciones repetidas. Devuelve cuantas lineas movio."""
+    wanted = set(plan)
+    if not wanted:
+        return 0
+
+    path = Path(path)
+    lines = path.read_text(encoding="utf-8").splitlines()
+
+    block = -1
+    title = ""
+    status = None
+    hold_header = {}   # bloque -> indice de su primer encabezado ON HOLD
+    moved = {}         # bloque -> lineas que se mueven
+    dropped = set()
+
+    for index, line in enumerate(lines):
+        if TITLE_LINE_RE.match(line):
+            block += 1
+            title = block_key(line)
+            status = None
+            continue
+
+        header = STATUS_HEADER_RE.match(line)
+        if header:
+            status = header.group(1).upper()
+            if status == "ON HOLD":
+                hold_header.setdefault(block, index)
+            continue
+
+        match = ENV_LINE_RE.search(line)
+        if match and status == "ON HOLD":
+            key = (title, match.group(1).upper(), match.group(2).strip())
+            if key in wanted:
+                moved.setdefault(block, []).append(line.rstrip())
+                dropped.add(index)
+
+    if not dropped:
+        return 0
+
+    insert_before = {hold_header[b]: moved[b] for b in moved if b in hold_header}
+
+    out = []
+    for index, line in enumerate(lines):
+        if index in dropped:
+            continue
+        if index in insert_before:
+            out.extend([IN_PROGRESS_HEADER, *insert_before[index], ""])
+        out.append(line)
+
+    path.write_text("\n".join(out) + "\n", encoding="utf-8")
+    return len(dropped)
 
 def strip_env_lists(text: str) -> str:
     """Version para Webex: mismo output pero sin las 'Environment lists'.
@@ -567,14 +720,38 @@ def get_open_mail_texts():
 
     return mails
 
-def run_organize_results():
+def run_organize_results(webex: bool = True):
     """Se corre siempre despues de escribir Daily_Envs.txt, que es lo que se
-    hacia a mano cada vez."""
+    hacia a mano cada vez. webex=False lo deja solo ordenar, sin mandar nada
+    a Webex."""
     print("\n▶ Corriendo OrganizeResults...")
-    result = subprocess.run([sys.executable, str(ORGANIZE_RESULTS_PATH)])
+    command = [sys.executable, str(ORGANIZE_RESULTS_PATH)]
+    if not webex:
+        command.append("--no-webex")
+    result = subprocess.run(command)
 
     if result.returncode != 0:
         print(f"⚠ OrganizeResults termino con codigo {result.returncode}")
+
+def start_first_envs(plan):
+    """Despues de que OrganizeResults ya mando el estado inicial a Webex (todo
+    en ON HOLD): el primero de cada mail pasa a IN PROGRESS y el resto se
+    queda ON HOLD (los COM, que no tienen primero, arrancan todos).
+
+    Se vuelve a correr OrganizeResults solo para dejar el archivo ordenado,
+    SIN Webex: el mensaje de Webex se queda con el estado inicial (ON HOLD) y
+    aqui termina el script."""
+    moved = promote_envs_to_in_progress(DAILY_ENVS_PATH, plan)
+
+    if not moved:
+        print("\n⚠ No encontre en ON HOLD los envs que tenian que arrancar; no cambie nada.")
+        return
+
+    print(f"\n▶ {moved} env(s) pasaron a IN PROGRESS:")
+    for title, label, version in plan:
+        print(f"   - {label} ({version})  [{title}]")
+
+    run_organize_results(webex=False)
 
 def read_multiline_input() -> str:
     print("Paste text. Finish with triple Enter:\n")
@@ -602,9 +779,11 @@ if __name__ == "__main__":
             print(f"\n📧 {len(open_mails)} mail(s) abierto(s) en Outlook detectado(s):")
             for subject, _ in open_mails:
                 print(f"   - {subject}")
-            output = build_blocks(open_mails)
+            output, start_plan = build_blocks_with_plan(open_mails)
         else:
-            output = build_webex_box(strip_quoted_reply(read_multiline_input()))
+            raw_text = strip_quoted_reply(read_multiline_input())
+            output = build_webex_box(raw_text)
+            start_plan = plan_start_envs(raw_text, output)
 
         print("\n" + output)
         # Al archivo va el output completo; al clipboard la version de Webex.
@@ -621,7 +800,8 @@ if __name__ == "__main__":
             update_daily_envs(output, answer)
             action = "replaced" if answer == "r" else "updated"
             print(f"\nDaily_Envs.txt {action}: {DAILY_ENVS_PATH}")
-            run_organize_results()
+            run_organize_results()   # ordena y manda a Webex el estado inicial
+            start_first_envs(start_plan)
             break
 
         if answer == "n":

@@ -9,8 +9,8 @@ import SBA as sba
 import Sanity_COM as sanity_com
 from conftest import DAILY_ENVS_SAMPLES
 
-REPORT = "http://192.0.2.3:9312/sheet-based?report=IF29_int_main_scenarios_v2_20260922.xlsx"
-NULL_REPORT = "http://192.0.2.3:9312/sheet-based?report=null"
+REPORT = "http://192.0.2.6:9312/sheet-based?report=IF29_int_main_scenarios_v2_20260922.xlsx"
+NULL_REPORT = "http://192.0.2.6:9312/sheet-based?report=null"
 
 
 # -------------------------

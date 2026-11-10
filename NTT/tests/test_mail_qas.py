@@ -42,6 +42,47 @@ def test_only_the_chosen_batch_is_read(daily_envs, monkeypatch):
     ]
 
 
+ON_HOLD_WITH_NOTE = f"""## **99CI — 5OctBuild**
+---
+🔄 **IN PROGRESS**:
+[**74QA**]({SDCI}/nttcw74_qa/job/Deploy-Parallel/) (99CI)
+
+🔒 **ON HOLD** till QA team finishes:
+[**80QA**]({SDCI}/nttcw80_qa/job/Deploy-Parallel/) (99CI)
+"""
+
+
+def test_on_hold_header_with_text_after_it_still_counts(daily_envs, monkeypatch):
+    """'**ON HOLD** till QA team finishes:' no traia ':' pegado al '**', asi que
+    se ignoraba y 80QA heredaba 'In Progress' del encabezado de arriba."""
+    path = daily_envs(text=ON_HOLD_WITH_NOTE)
+    monkeypatch.delenv(mfb.BATCH_ENV_VAR, raising=False)
+
+    rows = mfb.parse_daily_env_rows(path)
+
+    assert [(env, status) for _, env, _, status in rows] == [
+        ("74QA", "In Progress"), ("80QA", "On Hold"),
+    ]
+    assert mfb.parse_daily_env_statuses(path) == {"74QA": "In Progress", "80QA": "On Hold"}
+    # Un env On Hold no se revisa en Jenkins: solo los In Progress.
+    assert mfb.get_checkable_envs(ON_HOLD_WITH_NOTE.splitlines()) == {"74QA"}
+
+
+@pytest.mark.parametrize(
+    "line, status",
+    [
+        ("🔒 **ON HOLD**:", "On Hold"),
+        ("🔒 **ON HOLD** till both snapshots are created:", "On Hold"),
+        ("🔄 **IN PROGRESS** - T3 copy:", "In Progress"),
+        ("❌ **FAILED**:", "Failed"),
+        ("[**74QA**](https://x/job/nttcw74_qa/job/Deploy-Parallel/) (99CI)", None),
+        ("Environment lists:", None),
+    ],
+)
+def test_status_header_detection(line, status):
+    assert mfb.match_status_header(line) == status
+
+
 def test_mailed_batch_is_removed_from_the_file(daily_envs):
     path = daily_envs("messy_real_world.txt")
 
@@ -124,6 +165,99 @@ def test_column_matching_tolerates_small_differences():
     assert mfb.find_matching_column_key("COLLECTION", keys) == "COLLECTIONS"
     assert mfb.find_matching_column_key("ALGOMAS", keys) is None
     assert mfb.combine_statuses(["Passed", "Failed", "In Progress"]) == "Failed"
+
+
+class _Cell:
+    def __init__(self, value=None):
+        self.Value = value
+
+    @property
+    def Text(self):
+        return "" if self.Value is None else str(self.Value)
+
+
+class _Sheet:
+    """Mini hoja de Excel: celdas por (fila, columna), crea las que le pidan."""
+
+    def __init__(self, headers, env_text):
+        self.cells = {}
+        for col, header in headers.items():
+            self.cells[(4, col)] = _Cell(header)
+        self.cells[(5, 7)] = _Cell(env_text)
+        self.UsedRange = type("U", (), {
+            "Columns": type("C", (), {"Count": max(headers)})(),
+            "Rows": type("R", (), {"Count": 5})(),
+        })()
+
+    def Cells(self, row, col):
+        return self.cells.setdefault((row, col), _Cell())
+
+    def status_of(self, col):
+        return self.cells[(5, col)].Value
+
+
+HEADERS = {8: "Init", 9: "Get Versions from SD", 10: "Custom CM UI", 11: "Custom AUTH",
+           12: "Sanity", 13: "Overall Status"}
+
+
+def _run_patch_update(monkeypatch, tmp_path, passed, other=()):
+    log = tmp_path / "patch_status_log.txt"
+    log.write_text("\n".join(mfb.format_result("43QA", "https://x", list(passed), [], list(other))),
+                   encoding="utf-8")
+    sheet = _Sheet(HEADERS, "43QA (46CI)")
+    book = type("B", (), {"Worksheets": lambda self, name: sheet, "Save": lambda self: None})()
+    excel = type("E", (), {"ScreenUpdating": True, "DisplayAlerts": True})()
+    monkeypatch.setattr(mfb, "get_excel_app", lambda: excel)
+    monkeypatch.setattr(mfb, "find_workbook", lambda app, path: (book, False))
+    monkeypatch.setattr(mfb, "get_status_formats", lambda ws: {})
+    monkeypatch.setattr(mfb, "update_excel_env_rows", lambda ws: 5)
+    monkeypatch.setattr(mfb, "parse_daily_env_statuses", lambda path: {"43QA": "In Progress"})
+    mfb.update_excel_with_patch_results(log)
+    return sheet
+
+
+def test_in_progress_env_without_stage_info_is_never_left_passed(monkeypatch, tmp_path):
+    """Jenkins no regreso ningun stage para 43QA (build recien arrancado): nada
+    puede quedar en Passed, y Sanity espera en On Hold."""
+    sheet = _run_patch_update(monkeypatch, tmp_path, passed=[])
+
+    assert [sheet.status_of(c) for c in range(8, 12)] == ["In Progress"] * 4
+    assert sheet.status_of(12) == "On Hold"
+    assert sheet.status_of(13) == "In Progress"
+
+
+def test_in_progress_starts_right_after_the_last_confirmed_passed(monkeypatch, tmp_path):
+    sheet = _run_patch_update(monkeypatch, tmp_path, passed=["Init", "Get Versions from SD"])
+
+    assert [sheet.status_of(c) for c in range(8, 12)] == [
+        "Passed", "Passed", "In Progress", "In Progress",
+    ]
+    assert sheet.status_of(12) == "On Hold"
+    assert sheet.status_of(13) == "In Progress"
+
+
+def test_running_stage_pushes_in_progress_to_everything_on_its_right(monkeypatch, tmp_path):
+    sheet = _run_patch_update(
+        monkeypatch, tmp_path,
+        passed=["Init", "Get Versions from SD"], other=[("Custom CM UI", "IN_PROGRESS")],
+    )
+
+    assert [sheet.status_of(c) for c in range(8, 12)] == [
+        "Passed", "Passed", "In Progress", "In Progress",
+    ]
+    assert sheet.status_of(12) == "On Hold"
+
+
+def test_env_rows_never_write_into_a_patch_column(monkeypatch, daily_envs):
+    """La columna 24 fue de 'status'; hoy es 'Custom CM UI' y no se debe tocar."""
+    monkeypatch.setattr(mfb, "DAILY_ENVS_PATH", daily_envs(text=ON_HOLD_WITH_NOTE))
+    monkeypatch.delenv(mfb.BATCH_ENV_VAR, raising=False)
+    sheet = _Sheet({8: "Init"}, "")
+    sheet.cells.pop((5, 7))
+
+    mfb.update_excel_env_rows(sheet)
+
+    assert {col for (_, col) in sheet.cells if col != 8} <= {7}
 
 
 def test_patch_references_skip_jenkins_links():

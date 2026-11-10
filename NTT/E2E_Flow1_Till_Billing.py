@@ -46,9 +46,9 @@ ACCOUNT_POLL_SECONDS = 5
 # Si ya cayó al menos una cuenta y pasa este rato sin ninguna novedad
 # (ni cuenta nueva ni Rerun disparado), no se espera a la rezagada.
 STALL_GRACE_SECONDS = 180
-RERUN_AFTER_SECONDS = 180          # antes de esto no se toca nada (corrida normal)
+RERUN_AFTER_SECONDS = 90           # antes de esto no se toca nada (corrida normal)
 RERUN_CHECK_EVERY = 20             # cada cuánto se revisa si hay Rerun disponible
-RERUN_COOLDOWN_SECONDS = 120       # tras disparar un Rerun, dale chance de avanzar
+RERUN_COOLDOWN_SECONDS = 90        # tras disparar un Rerun, dale chance de avanzar
 MAX_RERUNS_PER_TAB = 2             # tope para no caer en un bucle de reruns
 
 # La tarea 'E2E Sanity' de Task Scheduler es MultipleInstances=IgnoreNew:
@@ -468,7 +468,7 @@ async def wait_for_accounts(
 
     print(
         f"⏳ Esperando account_number en {len(todas)} tab(s) "
-        f"(máx {timeout_seconds // 60} min; reruns automáticos tras {RERUN_AFTER_SECONDS // 60} min)..."
+        f"(máx {timeout_seconds // 60} min; reruns automáticos tras {RERUN_AFTER_SECONDS}s)..."
     )
 
     while time.time() - start < timeout_seconds:

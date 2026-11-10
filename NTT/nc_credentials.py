@@ -22,6 +22,7 @@ import getpass
 import json
 import os
 import sys
+import time
 from ctypes import wintypes
 from pathlib import Path
 
@@ -135,6 +136,62 @@ def delete_credentials(name: str) -> bool:
         return False
     del store[name]
     _save_store(store)
+    return True
+
+
+# -------------------------
+# SESIONES DEL NAVEGADOR (storage_state de Playwright)
+# -------------------------
+# Las cookies de sesión equivalen a una contraseña mientras duren, así que se
+# guardan igual que las credenciales: cifradas con DPAPI, nunca en texto plano.
+SESSION_MAX_AGE_HOURS = 24
+
+
+def _session_path(name: str) -> Path:
+    # Se lee STORE_PATH al llamar (no al importar) para que sea fácil de probar.
+    return STORE_PATH.parent / f"session_{name}.dat"
+
+
+def save_session_state(name: str, state: dict) -> None:
+    """Guarda (cifrado) el storage_state de un contexto de Playwright."""
+    path = _session_path(name)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    payload = {"saved_at": time.time(), "state": state}
+    encrypted = _encrypt(json.dumps(payload).encode("utf-8"))
+
+    # Se escribe a un temporal y se reemplaza: si una corrida manual y la
+    # programada guardan al mismo tiempo, nadie lee un archivo a medias.
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+    tmp.write_bytes(encrypted)
+    tmp.replace(path)
+
+
+def load_session_state(name: str, max_age_hours: float = SESSION_MAX_AGE_HOURS):
+    """
+    Regresa el storage_state guardado, o None si no hay, está viejo, o no se
+    pudo leer. Nunca truena: sin sesión simplemente se hace login normal.
+    """
+    path = _session_path(name)
+    if not path.exists():
+        return None
+
+    try:
+        payload = json.loads(_decrypt(path.read_bytes()).decode("utf-8"))
+        age_hours = (time.time() - float(payload.get("saved_at", 0))) / 3600
+        if age_hours > max_age_hours:
+            return None
+        state = payload.get("state")
+        return state if isinstance(state, dict) else None
+    except Exception:
+        return None
+
+
+def forget_session_state(name: str) -> bool:
+    path = _session_path(name)
+    if not path.exists():
+        return False
+    path.unlink()
     return True
 
 

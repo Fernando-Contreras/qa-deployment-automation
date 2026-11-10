@@ -9,6 +9,7 @@ El parseo del archivo y el chequeo de status son de Track_Deployments.
 """
 
 import os
+import re
 from datetime import datetime
 
 import Track_Deployments as td
@@ -37,6 +38,16 @@ def hours_since(moment, now=None) -> float:
 
 def is_snapshot(value: str) -> bool:
     return not value.lower().startswith("file://")
+
+
+# Los snapshots terminan en _T<numero> y ese numero es el tenant:
+# ..._nitro_snapshot_ci_20261103_T4  ->  QATENANT_4
+TENANT_SUFFIX_RE = re.compile(r"_T(\d+)\s*$", re.IGNORECASE)
+
+
+def tenant_from_snapshot(snapshot: str):
+    match = TENANT_SUFFIX_RE.search((snapshot or "").strip())
+    return match.group(1) if match else None
 
 
 def classify(deployment, now):

@@ -37,7 +37,13 @@ from nc_credentials import LoginError, get_credentials
 
 import Daily_Envs_Plan as plan
 import Track_Deployments as td
-from jenkins_web import JenkinsForm
+from pages import JenkinsBuildPage, JenkinsLoginPage
+from jenkins_web import (
+    JenkinsForm,
+    new_context_with_session,
+    persist_session,
+    saved_session,
+)
 from ntt_config import SNAPCI, SDCI, JENKINS_DEFAULT_USER, JENKINS_FOLDER
 
 # Credenciales cifradas (DPAPI). La primera vez las pide y las guarda.
@@ -66,6 +72,7 @@ log = _form.log
 format_progress = _form.format_progress
 wait_for_job_form = _form.wait_for_job_form
 do_login = _form.do_login
+login_if_needed = _form.login_if_needed
 click_checkbox_by_label = _form.click_checkbox_by_label
 click_build = _form.click_build
 get_editable_value_field = _form.get_editable_value_field
@@ -148,24 +155,21 @@ async def run_env(
 
     async with semaphore:
         try:
-            page = await context.new_page()
+            jenkins = JenkinsBuildPage(await context.new_page(), _form, env)
             url = (
                 build_snapshot_url(env)
                 if target["snapshot_mode"]
                 else build_sdci_url(env)
             )
-            await page.goto(url, wait_until="domcontentloaded", timeout=1200000)
-            await wait_for_job_form(page)
+            await jenkins.open(url)
 
             if target["snapshot_mode"]:
                 await configure_snapshot(
-                    page, target["payload"], target["tenant"],
+                    jenkins.page, target["payload"], target["tenant"],
                     env, current_index, total_envs,
                 )
             else:
-                await configure_sd_file(
-                    page, target["payload"], env, current_index, total_envs
-                )
+                await jenkins.deploy_sd_file(target["payload"], current_index, total_envs)
 
             return (env, True, None)
         except Exception as exc:
@@ -205,8 +209,9 @@ def manual_targets():
 def targets_from_deployments(to_trigger, interactive=True):
     """De cada deployment saca env + SD/snapshot.
 
-    El tenant solo se pregunta en modo interactivo; en full auto sale de
-    QA_ENVS_TENANT y, si no esta, ese env se salta.
+    El tenant sale del sufijo _T<n> del nombre del snapshot. Solo si el nombre
+    no lo trae: en modo interactivo se pregunta; en full auto sale de
+    QA_ENVS_TENANT y, si tampoco esta, ese env se salta.
     """
     targets = []
     skipped = []
@@ -226,7 +231,12 @@ def targets_from_deployments(to_trigger, interactive=True):
 
         if snapshot_mode:
             if patch not in tenant_by_patch:
-                if interactive:
+                from_name = plan.tenant_from_snapshot(patch)
+                if from_name:
+                    print(f"\n🏢 Snapshot: {patch}")
+                    print(f"   Tenant {from_name} (del _T{from_name} con que termina el nombre)")
+                    tenant_by_patch[patch] = from_name
+                elif interactive:
                     envs_here = ", ".join(
                         td.extract_env_label(d["url"])
                         for d in to_trigger
@@ -234,6 +244,7 @@ def targets_from_deployments(to_trigger, interactive=True):
                     )
                     print(f"\n🏢 Snapshot: {patch}")
                     print(f"   Envs: {envs_here}")
+                    print("   El nombre no termina en _T<numero>, asi que no lo puedo deducir.")
                     tenant_by_patch[patch] = input("   Tenant (2 / 3 / 4): ").strip()
                 else:
                     tenant_by_patch[patch] = AUTO_TENANT
@@ -242,7 +253,11 @@ def targets_from_deployments(to_trigger, interactive=True):
 
             if not tenant:
                 skipped.append(
-                    (label, "es snapshot y no hay tenant (pon QA_ENVS_TENANT=2/3/4)")
+                    (
+                        label,
+                        "es snapshot, su nombre no termina en _T<numero> y no hay "
+                        "tenant (pon QA_ENVS_TENANT=2/3/4)",
+                    )
                 )
                 continue
 
@@ -342,9 +357,12 @@ async def auto_targets(pw, ask=False):
 
     # El chequeo va sin ventana: no hay nada que mirar y es mas rapido.
     check_browser = await pw.chromium.launch(headless=True)
-    check_context = await check_browser.new_context()
+    check_context = await new_context_with_session(check_browser, saved_session())
     try:
         await td.check_all_deployments(check_context, deployments)
+        # Ya autenticados: se guarda para el siguiente script (y para el
+        # trigger de abajo, que lo carga del disco).
+        await persist_session(check_context)
     except LoginError as exc:
         print(exc)
         return None
@@ -422,16 +440,16 @@ async def main():
         print("   Envs: " + ", ".join(f"nttcw{t['env']}" for t in targets) + "\n")
 
         browser = await pw.chromium.launch(headless=HEADLESS)
-        context = await browser.new_context()
+        context = await new_context_with_session(browser, saved_session())
 
         # Login una sola vez sobre el folder: la cookie queda en el context
-        # y todas las pestanas paralelas la heredan.
-        login_page = await context.new_page()
-        await login_page.goto(
-            f"{SD_HOST}{FOLDER_PATH}", wait_until="domcontentloaded", timeout=1200000
-        )
+        # y todas las pestanas paralelas la heredan. Con la sesion guardada
+        # ni aparece el formulario (login_if_needed no espera a que salga).
+        login_page = JenkinsLoginPage(await context.new_page(), _form)
+        await login_page.open(f"{SD_HOST}{FOLDER_PATH}")
         print("🔐 Logging in...")
-        await do_login(login_page)
+        if await login_page.sign_in():
+            await persist_session(context)
         print("✅ Logged in.\n")
         await login_page.close()
 

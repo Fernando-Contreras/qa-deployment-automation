@@ -31,6 +31,10 @@ Uso:
   python Sanity_COM.py --jobs 3      -> cuantos en paralelo (default 4)
   python Sanity_COM.py --secuencial  -> uno tras otro, en una sola pestaña
   python Sanity_COM.py --dejar-abierto -> no cerrar Chrome al terminar
+  python Sanity_COM.py --esperar     -> aguardar a los que sigan IN PROGRESS
+
+Dispara los que esten en PASSED en ese momento y ya. Los que sigan
+desplegandose solo se mencionan: cuando terminen, se vuelve a correr.
 
 Usa SU PROPIO Chrome (puerto 9344 y perfil aparte) y lo cierra al terminar.
 No se cuelga de tu Chrome de diario a proposito: ese trae la sesion de
@@ -95,6 +99,10 @@ SUFIJO_PREFERIDO = "_qa"
 # su propio Angular, y deja de ganarse tiempo.
 MAX_JOBS = 4
 
+# Tope por environment. Un env normal tarda 3-10s; si pasa de esto es que algo
+# se trabó, y mas vale cortarlo y seguir que dejar el script congelado.
+TIMEOUT_ENV = 180
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SHOT_DIR = os.path.join(BASE_DIR, "com_sanity_shots")
 
@@ -102,8 +110,16 @@ SHOT_DIR = os.path.join(BASE_DIR, "com_sanity_shots")
 DAILY_ENVS_PATH = str(ntt_config.DAILY_ENVS_PATH)
 
 # Mismo formato que usan Results_Sanity.py y Track_Deployments.py.
+# El encabezado puede traer explicación después del estado, por ejemplo:
+#   ⚠️ **BLOCKED** due to report validation data from QA team:
+# Antes se exigía que terminara justo en "**:", así que esa línea no se
+# reconocía, el estado se quedaba en PASSED y los envs BLOCKED de abajo
+# acababan disparando sanity. Pasó de verdad con com39.
 STATUS_HEADER_RE = re.compile(
-    r"^\s*(?:\S+\s+)?\*\*(PASSED|IN PROGRESS|ON HOLD|BLOCKED|FAILED)\*\*:\s*$"
+    r"^\s*(?:\S+\s+)?\*\*\s*"
+    r"(PASSED|IN[ _-]?PROGRESS|ON[ _-]?HOLD|BLOCKED|FAILED)"
+    r"\s*\*\*[^:]*:?\s*$",
+    re.IGNORECASE,
 )
 # Solo cuentan los links markdown [**COM25QA**](...nttcom25_qa...).
 LINK_RE = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
@@ -809,6 +825,22 @@ async def lanzar_run(page, numero, disparar=True):
 
 
 # ---------------- PARALELO ----------------
+async def recuperar_pestana(page):
+    """
+    Deja la pestaña otra vez usable después de un corte por tiempo.
+    Si no se recarga, el siguiente environment heredaría la pantalla trabada.
+    """
+    try:
+        await asyncio.wait_for(
+            page.goto(URL, wait_until="commit", timeout=60000), timeout=70
+        )
+        return await asyncio.wait_for(
+            wait_for_table(page, timeout=90000), timeout=100
+        )
+    except Exception:
+        return False
+
+
 async def pestana_trabajadora(context, cola, resultados, tiempos, disparar,
                              headless, retraso):
     """
@@ -845,7 +877,20 @@ async def pestana_trabajadora(context, cola, resultados, tiempos, disparar,
             TAG.set(f"[com{numero}]")
             inicio = time.time()
             try:
-                resultados[numero] = await lanzar_run(page, numero, disparar=disparar)
+                # Tope duro por environment. Hace falta porque page.evaluate()
+                # NO respeta el timeout por defecto de Playwright: si Angular
+                # se traba, ese await se queda esperando para siempre y el
+                # script entero se congela sin decir nada.
+                resultados[numero] = await asyncio.wait_for(
+                    lanzar_run(page, numero, disparar=disparar),
+                    timeout=TIMEOUT_ENV,
+                )
+            except asyncio.TimeoutError:
+                log(f"⏰ Se pasó de {TIMEOUT_ENV}s; lo corto y sigo con los demás.")
+                resultados[numero] = None
+                if not await recuperar_pestana(page):
+                    log("🛑 No pude dejar la pestaña usable; la dejo y me salgo.")
+                    return
             except Exception as e:
                 log(f"💥 {type(e).__name__}: {str(e).splitlines()[0][:120]}")
                 resultados[numero] = None
@@ -896,7 +941,19 @@ async def correr_secuencial(page, envs, disparar):
     for numero in envs:
         TAG.set(f"[com{numero}]")
         inicio = time.time()
-        resultados[numero] = await lanzar_run(page, numero, disparar=disparar)
+        try:
+            resultados[numero] = await asyncio.wait_for(
+                lanzar_run(page, numero, disparar=disparar), timeout=TIMEOUT_ENV
+            )
+        except asyncio.TimeoutError:
+            log(f"⏰ Se pasó de {TIMEOUT_ENV}s; lo corto y sigo con los demás.")
+            resultados[numero] = None
+            if not await recuperar_pestana(page):
+                log("🛑 No pude dejar la pestaña usable; me salgo.")
+                break
+        except Exception as e:
+            log(f"💥 {type(e).__name__}: {str(e).splitlines()[0][:120]}")
+            resultados[numero] = None
         tiempos[numero] = time.time() - inicio
     TAG.set("")
     return resultados, tiempos
@@ -1192,6 +1249,47 @@ async def pagina_principal(context):
 
 
 # ---------------- DAILY ENVS ----------------
+def leer_estados_com(ruta=None):
+    """
+    Lee Daily_Envs.txt y devuelve {estado: [numeros de COM]}.
+
+    Mismas reglas de siempre: el estado se resetea en cada bloque "##" y en
+    "Environment lists:", y solo cuentan las líneas que son link markdown
+    (así se ignoran renglones como "- CI_23 SS -> COM15, COM38" o
+    "nttcom23_ci_48664/...", que no son envs desplegados).
+    """
+    por_estado = {}
+    estado = None
+
+    with open(ruta or DAILY_ENVS_PATH, "r", encoding="utf-8", errors="ignore") as f:
+        for linea in f:
+            limpia = linea.strip()
+
+            if limpia.startswith("##") or limpia.lower().startswith("environment lists"):
+                estado = None
+                continue
+
+            cabecera = STATUS_HEADER_RE.match(limpia)
+            if cabecera:
+                # "IN_PROGRESS", "in progress", "IN-PROGRESS" -> "IN PROGRESS"
+                estado = re.sub(r"[_-]", " ", cabecera.group(1)).upper()
+                continue
+
+            if not estado:
+                continue
+
+            for etiqueta, url in LINK_RE.findall(linea):
+                # El número sale de la URL, que es la fuente de verdad.
+                m = NTTCOM_RE.search(url) or COM_LABEL_RE.search(etiqueta)
+                if m:
+                    numero = str(int(m.group(1)))
+                    lista = por_estado.setdefault(estado, [])
+                    if numero not in lista:
+                        lista.append(numero)
+
+    return por_estado
+
+
 def leer_envs_passed():
     """
     Saca de Daily_Envs.txt los COM que quedaron en PASSED.
@@ -1204,50 +1302,82 @@ def leer_envs_passed():
     como "- CI_23 SS -> COM15, COM38, COM40" (la lista del release) y
     "nttcom23_ci_48664/..." (un snapshot), que no son envs desplegados.
     """
-    encontrados = []
-    estado = None
-
-    with open(DAILY_ENVS_PATH, "r", encoding="utf-8", errors="ignore") as f:
-        for linea in f:
-            limpia = linea.strip()
-
-            if limpia.startswith("##") or limpia.lower().startswith("environment lists"):
-                estado = None
-                continue
-
-            cabecera = STATUS_HEADER_RE.match(limpia)
-            if cabecera:
-                estado = cabecera.group(1)
-                continue
-
-            if estado != "PASSED":
-                continue
-
-            for etiqueta, url in LINK_RE.findall(linea):
-                # El número sale de la URL, que es la fuente de verdad.
-                m = NTTCOM_RE.search(url) or COM_LABEL_RE.search(etiqueta)
-                if m:
-                    numero = str(int(m.group(1)))
-                    if numero not in encontrados:
-                        encontrados.append(numero)
-
-    return encontrados
+    return leer_estados_com().get("PASSED", [])
 
 
-def envs_del_daily():
+def envs_del_daily(esperar_in_progress=False, timeout_min=90, cada_seg=60):
+    """
+    Los COM que están en PASSED ahora mismo. No espera a nadie.
+
+    Si queda algún env IN PROGRESS solo lo menciona y sigue: cuando ese
+    termine, se vuelve a correr el script y listo.
+
+    Con --esperar sí aguarda (releyendo el archivo cada minuto) a que no
+    quede ninguno en progreso antes de disparar.
+    """
     print("=" * 55)
     print("  SANITY COM")
     print("=" * 55)
     print(f"📋 Leyendo {DAILY_ENVS_PATH}")
 
-    try:
-        envs = leer_envs_passed()
-    except FileNotFoundError:
-        print("❌ No encontré Daily_Envs.txt en esa ruta.")
-        return []
-    except Exception as e:
-        print(f"❌ No pude leer Daily_Envs.txt: {type(e).__name__}: {e}")
-        return []
+    inicio = time.time()
+    aviso_dado = False
+
+    while True:
+        try:
+            estados = leer_estados_com()
+        except FileNotFoundError:
+            print("❌ No encontré Daily_Envs.txt en esa ruta.")
+            return []
+        except Exception as e:
+            print(f"❌ No pude leer Daily_Envs.txt: {type(e).__name__}: {e}")
+            return []
+
+        pasados = estados.get("PASSED", [])
+        corriendo = estados.get("IN PROGRESS", [])
+
+        if not corriendo or not esperar_in_progress:
+            if corriendo:
+                print(
+                    "🔄 Todavía desplegándose (no los toco): "
+                    + ", ".join("com" + n for n in corriendo)
+                )
+            break
+
+        if not aviso_dado:
+            otros = {k: v for k, v in estados.items() if k not in ("PASSED", "IN PROGRESS")}
+            print(f"✅ Ya en PASSED: {', '.join('com' + n for n in pasados) or '(ninguno)'}")
+            for estado, nums in otros.items():
+                print(f"   {estado}: {', '.join('com' + n for n in nums)}")
+            print(
+                f"\n⏳ Espero a que terminen: "
+                f"{', '.join('com' + n for n in corriendo)}"
+            )
+            print(f"   Reviso el archivo cada {cada_seg}s. Ctrl+C para no esperar.")
+            print("   (o corre con --no-esperar para disparar ya los que pasaron)")
+            aviso_dado = True
+
+        if time.time() - inicio > timeout_min * 60:
+            print(f"\n⚠️ Llevo {timeout_min} min esperando y siguen en progreso:")
+            print(f"   {', '.join('com' + n for n in corriendo)}")
+            print("   Disparo los que ya pasaron.")
+            break
+
+        try:
+            time.sleep(cada_seg)
+        except KeyboardInterrupt:
+            print("\n↪️ Ya no espero; sigo con los que pasaron.")
+            break
+
+    if esperar_in_progress:
+        estados = leer_estados_com()
+    envs = estados.get("PASSED", [])
+
+    # Lo que NO es PASSED se dice en voz alta: así se nota si algo quedó
+    # bloqueado o fallido en vez de pasar desapercibido.
+    for estado, nums in estados.items():
+        if estado not in ("PASSED", "IN PROGRESS") and nums:
+            print(f"⏭️ {estado} (no se tocan): {', '.join('com' + n for n in nums)}")
 
     if not envs:
         print("ℹ️ No hay ningún COM en PASSED ahorita.")
@@ -1320,6 +1450,7 @@ if __name__ == "__main__":
     headless = not ("--visible" in args or "--ventana" in args)
     paralelo = "--secuencial" not in args
     dejar_abierto = "--dejar-abierto" in args
+    esperar_ip = "--esperar" in args
 
     # --perfil deja usar un perfil de Chrome aparte, por si el de siempre
     # quedó bloqueado por un proceso que no se puede cerrar.
@@ -1346,7 +1477,7 @@ if __name__ == "__main__":
         if a.isdigit() and not (i and args[i - 1] in ("--jobs", "--perfil"))
     ]
 
-    envs = desde_argv or envs_del_daily()
+    envs = desde_argv or envs_del_daily(esperar_in_progress=esperar_ip)
     if not envs:
         print("\n⚠️ Nada que correr. Si quieres forzar uno: python Sanity_COM.py 25")
         sys.exit(1)
