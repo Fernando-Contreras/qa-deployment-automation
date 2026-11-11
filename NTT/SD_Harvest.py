@@ -19,6 +19,7 @@ Uso:
 
 import argparse
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -62,9 +63,60 @@ def parse_sd_mail(subject, body, attachment_names=()):
     return {
         "subject": subject.strip(),
         "ci": ci.group(1) if ci else None,
-        "version": version.group(1) if version else None,
+        # "T2.3.54.0" en el nombre se trata como "T2.3.54": el contenido y los
+        # bloques usan la version sin los .0 del final.
+        "version": re.sub(r"(\.0)+$", "", version.group(1)) if version else None,
         "sd_path": sd_path,
     }
+
+
+# -------------------------
+# Verificacion: el nombre del SD debe coincidir con su contenido
+# -------------------------
+MIN_VERSION_HITS = 3  # un SD bueno tiene MAS de 3 menciones de su version
+
+
+def verify_sd_content(version, content):
+    """-> (ok, detalle). Un SD es bueno si la version de su nombre aparece
+    mas de 3 veces dentro del yaml Y al menos una linea de rbm la lleva
+    (un SD malo solo tiene las 3 menciones de siempre y su rbm es de otra version)."""
+    if not version:
+        return False, "no pude sacar la version del nombre del SD"
+    if not content:
+        return False, "no pude leer el contenido del SD"
+
+    # Tambien cuenta "T2.3.54.0" como T2.3.54, pero no "T2.3.541" ni "T2.3.54.1".
+    pattern = re.compile(rf"(?<![\d.]){re.escape(version)}(?:\.0)*(?!\.?\d)", re.IGNORECASE)
+    hits = len(pattern.findall(content))
+    rbm_ok = any(
+        "rbm" in line.lower() and pattern.search(line) for line in content.splitlines()
+    )
+    detail = f"{hits} coincidencias con {version}, rbm con {version}: {'si' if rbm_ok else 'no'}"
+    return (hits > MIN_VERSION_HITS and rbm_ok), detail
+
+
+def unc_path(sd_path):
+    """file://host/a/b.yaml -> \\\\host\\a\\b.yaml"""
+    return "\\\\" + re.sub(r"^file:/+", "", sd_path).replace("/", "\\")
+
+
+def read_sd_content(sd_path, attachments):
+    """Contenido del yaml: del adjunto del correo; si no, de la ruta de red."""
+    import tempfile
+
+    for att in attachments:
+        if SD_ATTACH_RE.search(att.FileName):
+            try:
+                tmp = Path(tempfile.mkdtemp(prefix="sd_harvest_")) / att.FileName
+                att.SaveAsFile(str(tmp))
+                return tmp.read_text(encoding="utf-8", errors="replace")
+            except Exception as exc:
+                print(f"  (no pude leer el adjunto {att.FileName}: {exc})")
+    try:
+        return Path(unc_path(sd_path)).read_text(encoding="utf-8", errors="replace")
+    except Exception as exc:
+        print(f"  (no pude leer {sd_path}: {exc})")
+        return None
 
 
 # -------------------------
@@ -168,9 +220,11 @@ def read_open_mails():
         item = outlook.Inspectors.Item(i).CurrentItem
         subject = getattr(item, "Subject", "") or ""
         body = getattr(item, "Body", "") or ""
-        attachments = [a.FileName for a in item.Attachments] if hasattr(item, "Attachments") else []
-        mail = parse_sd_mail(subject, body, attachments)
+        attachments = list(item.Attachments) if hasattr(item, "Attachments") else []
+        mail = parse_sd_mail(subject, body)
         if mail:
+            content = read_sd_content(mail["sd_path"], attachments)
+            mail["valid"], mail["detail"] = verify_sd_content(mail["version"], content)
             mails.append(mail)
         else:
             print(f"(se ignora, no es un SD): {subject.strip() or '(sin asunto)'}")
@@ -190,7 +244,14 @@ def main(argv=None):
         print("No hay correos de SD abiertos en Outlook.")
         return 1
 
-    new_text, results = apply_mails(raw, mails)
+    good = [m for m in mails if m["valid"]]
+    bad = [m for m in mails if not m["valid"]]
+    for mail in bad:
+        print(f"❌ SD MALO, no se pega: {mail['subject']}\n    {mail['sd_path']}\n    {mail['detail']}")
+    for mail in good:
+        print(f"✔ SD verificado: {mail['subject']} ({mail['detail']})")
+
+    new_text, results = apply_mails(raw, good)
     for label, outcome in results:
         print(f"- {label}\n    {outcome}")
 
@@ -199,7 +260,14 @@ def main(argv=None):
         print(f"\nActualizado {path}")
     elif args.dry_run:
         print("\n(dry-run: no se escribio nada)")
-    return 0
+
+    # Siempre al final, haya habido SD malo o no.
+    if args.dry_run:
+        print("\n(dry-run: aqui se lanzaria QA_Envs.py --f)")
+        return 0
+    script = Path(__file__).with_name("QA_Envs.py")
+    print("\nLanzando QA_Envs.py --f ...")
+    return subprocess.run([sys.executable, str(script), "--f"], check=False).returncode
 
 
 if __name__ == "__main__":

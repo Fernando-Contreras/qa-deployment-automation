@@ -1186,6 +1186,8 @@ async def analyze(page, entry, jenkins_user, jenkins_pass, args):
         "stage": entry.get("stage"),
         "version": entry.get("version"),
         "label": label,
+        # El log completo sólo lo usa el agente de IA (--agent); lo demás no lo toca.
+        "log_text": log_text,
     }
     info["failed_item"] = guess_failed_item(block, meta, entry.get("stage"))
     info["component"] = "DevOps" if is_sql_problem(block) else "IT"
@@ -1196,6 +1198,74 @@ async def analyze(page, entry, jenkins_user, jenkins_pass, args):
           f"{' (el log apunta a SQL)' if info['component'] == 'DevOps' else ''}")
 
     return info
+
+
+async def jira_text_search(page, query):
+    """Tickets recientes del proyecto que mencionan 'query' (para el agente). Sólo lee."""
+    safe = re.sub(r'["\\]', " ", query)[:120].strip()
+    if not safe:
+        return []
+
+    jql = (
+        f'project = {PROJECT_KEY} AND issuetype = {ISSUE_TYPE} '
+        f'AND created >= -30d AND text ~ "{safe}" ORDER BY created DESC'
+    )
+    url = f"{JIRA_BASE}/rest/api/2/search?jql={quote(jql)}&maxResults=5&fields=summary,status"
+    status, data, _ = await jira_request(page, "GET", url)
+    if status != 200 or not data:
+        return []
+
+    return [
+        (i["key"], i["fields"]["summary"], i["fields"]["status"]["name"])
+        for i in data.get("issues", [])
+    ]
+
+
+async def run_agent_triage(page, group, args):
+    """
+    Le pide al agente (defect_agent.py) un diagnóstico del primer env del grupo
+    y lo imprime. Nunca tumba la corrida: si no hay llave, no hay internet o
+    la API falla, lo avisa y sigue con las reglas de siempre.
+    """
+    import defect_agent
+
+    entry, info = group[0]
+    context = {
+        "environment": info["env_job"],
+        "failed stage": info.get("stage"),
+        "release": info.get("version"),
+        "pipeline": info["pipeline"],
+        "failed patch (rules)": info["meta"].get("patch"),
+        "envs in this group": ", ".join(e["label"] for e, _ in group),
+    }
+
+    print(f"\n{'─' * 78}\n🤖 Agente de IA — {entry['label']}\n{'─' * 78}")
+
+    if args.agent_dry_run:
+        print(defect_agent.preview_payload(info["log_text"], context))
+        print("\n🧪 --agent-dry-run: no se llamó a ninguna API.")
+        return
+
+    try:
+        triage = await defect_agent.triage_failure(
+            info["log_text"],
+            context,
+            jira_search=lambda query: jira_text_search(page, query),
+        )
+    except defect_agent.AgentUnavailable as exc:
+        print(f"⚠ Agente no disponible: {exc}")
+        return
+    except Exception as exc:
+        print(f"⚠ El agente falló ({type(exc).__name__}: {exc}); sigo con las reglas.")
+        return
+
+    if triage is None:
+        print("⚠ El agente no llegó a una conclusión; sigo con las reglas.")
+        return
+
+    print(defect_agent.format_triage(triage))
+    if triage.component != info["component"]:
+        print(f"   ⚠ Difiere de la regla ({info['component']}): revísalo antes de confirmar.")
 
 
 def build_fields(infos, args, assignees=None):
@@ -1360,6 +1430,12 @@ async def run(entries, args, headless, update_file):
                     labels = ", ".join(entry["label"] for entry, _ in group)
                     print(f"\n⚠ {labels}: hay un defect abierto de ese env que no es igual a este:")
                     print(f"   • {issue['key']} [{issue['status']}] {issue['summary']}  →  {JIRA_BASE}/browse/{issue['key']}")
+
+            # ---- 3c. AGENTE DE IA (opcional: --agent / --agent-dry-run) ----
+            # Sólo sugiere. No cambia el componente, el summary ni nada del ticket.
+            if args.agent or args.agent_dry_run:
+                for group in to_create:
+                    await run_agent_triage(page, group, args)
 
             # ---- 4. PREVIEW ----
             assignees = await resolve_component_assignees(
@@ -1527,6 +1603,16 @@ def parse_args():
     parser.add_argument("--show", action="store_true", help="Browser visible")
     parser.add_argument("--no-organize", action="store_true", help="No correr OrganizeResults antes")
     parser.add_argument("--no-webex", action="store_true", help="No publicar a Webex al final")
+    parser.add_argument(
+        "--agent",
+        action="store_true",
+        help="Pedirle a un agente de IA un diagnóstico de cada falla (sólo sugiere; sale texto redactado a la API de Anthropic)",
+    )
+    parser.add_argument(
+        "--agent-dry-run",
+        action="store_true",
+        help="Enseña lo que se le mandaría al agente (ya redactado) sin llamar a ninguna API",
+    )
     parser.add_argument(
         "--priority",
         default=DEFAULT_PRIORITY,

@@ -19,7 +19,7 @@ BRAND = "net" + "cracker"
 
 PATTERNS = {
     "IP privada": r"\b(?:10\.\d{1,3}|192\.168|172\.(?:1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}\b",
-    "ruta de usuario real": r"C:\\{1,2}Users\\{1,2}(?!\\*(?:you\b|\.\.\.))",
+    "ruta de usuario real": r"C:\\{1,2}Users\\{1,2}(?!\\*(?:you\b|\.\.\.|<user>))",
     "contraseña/token escritos en el código":
         r"(?i)(passw(?:or)?d|token|secret|api[_-]?key)\w*\s*=\s*[\"'](?!https?://)[^\"']{3,}[\"']",
     # Literal con mayúscula, minúscula, dígito Y un símbolo: lo que parece una

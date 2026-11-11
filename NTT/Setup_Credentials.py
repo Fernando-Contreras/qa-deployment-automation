@@ -34,6 +34,7 @@ ACCOUNTS = {
     "jira": "TMS / Jira (Deployment_Defect; PIM, AM y Excel_Screenshots de GCI)",
     "toms": "TOMS de GCI (PIM_Validation, AM_Validation)",
     "gci_unix": "Servidor Linux de GCI: PuTTY y dzdo (GCIBilling)",
+    "anthropic": "Llave de la API de Anthropic para el agente de IA (Deployment_Defect --agent). Usuario: cualquier cosa; Contraseña: la llave",
 }
 
 

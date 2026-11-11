@@ -62,6 +62,29 @@ flowchart LR
 - **Office automation over COM** — Excel, Word and Outlook — including the
   quirks (frozen panes, `PrintWindow` screenshots, COM apartments per thread).
 
+## AI-assisted failure triage (optional)
+
+`Deployment_Defect.py --agent` hands a failed build to an LLM **agent**
+(`defect_agent.py`, Claude through the Anthropic SDK). Instead of fixed rules, the
+model decides what to look at: it reads the log overview, searches and reads
+specific lines, looks for similar tickets in Jira, and finally submits a structured
+diagnosis (probable cause, component, confidence, evidence line numbers).
+
+It is built to be safe to run next to production tooling:
+
+- **Read-only tools.** It can't create or edit anything; the existing confirmation
+  prompt still decides what gets filed, and a disagreement with the rule-based
+  result is flagged, not applied.
+- **Privacy first.** Off by default. Everything sent to the API passes through a
+  redactor (IPs, hosts, emails, tokens, passwords); `--agent-dry-run` shows the
+  exact payload without calling anything.
+- **Bounded.** Hard limits on turns and tokens, capped tool output, strict tool
+  schemas, graceful handling of refusals, and any agent failure falls back to the
+  normal flow. Logs are treated as untrusted data (prompt-injection aware).
+- **Tested without an API key**: a scripted fake client drives the loop in
+  `tests/test_defect_agent.py`; it also caught a regex backtracking bug in the redactor
+  (10–36 s on a 50k-character line) before it shipped.
+
 ## Tests
 
 ```bash

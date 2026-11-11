@@ -5,3 +5,4 @@ keyboard>=0.13.5
 pyperclip>=1.11
 Pillow>=10.0
 python-dateutil>=2.9
+anthropic>=1.0
